@@ -113,6 +113,63 @@
     backdrop-filter: blur(10px); color: #8b96ad;
   }
   #status-badge.active { color: #7CFF9B; border-color: rgba(124,255,155,.4); }
+
+  /* Image drag & drop overlay */
+  #drop-zone {
+    position: fixed; inset: 12px; z-index: 90;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(8,12,22,.72); border: 2px dashed var(--accent); border-radius: 20px;
+    font-size: 20px; font-weight: 600; color: var(--accent);
+    backdrop-filter: blur(6px); pointer-events: none;
+  }
+  #drop-zone.show { display: flex; }
+
+  /* Mode switcher (segmented control) */
+  #mode-bar {
+    position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 30;
+    display: flex; gap: 4px; padding: 4px; border-radius: 999px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  .mode-btn {
+    padding: 8px 20px; border-radius: 999px; border: none; cursor: pointer;
+    background: transparent; color: #8b96ad; font-size: 13px; font-weight: 600;
+    font-family: inherit; transition: all .2s ease; white-space: nowrap;
+  }
+  .mode-btn:hover { color: #fff; }
+  .mode-btn.active {
+    background: linear-gradient(135deg, rgba(110,231,255,.3), rgba(179,136,255,.3));
+    color: #fff; box-shadow: 0 0 14px rgba(110,231,255,.35);
+  }
+
+  /* Live gesture indicator */
+  #gesture-badge {
+    position: fixed; top: 108px; left: 16px; z-index: 30;
+    padding: 6px 14px; border-radius: 10px; font-size: 12.5px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px); color: var(--accent); display: none;
+  }
+  #gesture-badge.show { display: block; }
+
+  /* Per-mode help groups inside the help bar */
+  .help-group { display: none; gap: 18px; justify-content: center; flex-wrap: wrap; width: 100%; }
+  .help-group.active { display: flex; }
+
+  /* Combo / event toasts */
+  #toast-wrap {
+    position: fixed; left: 16px; bottom: 180px; z-index: 40;
+    display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none;
+  }
+  .toast {
+    padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 600; color: #fff;
+    background: var(--glass-bg); border: 1px solid var(--accent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 0 18px rgba(110,231,255,.35);
+    animation: toast-in .25s ease, toast-out .4s ease 1.8s forwards;
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateX(-14px); } }
+  @keyframes toast-out { to { opacity: 0; transform: translateX(-14px); } }
 </style>
 </head>
 <body>
@@ -128,13 +185,23 @@
     </div>
   </div>
   <div class="controls">
+    <button class="btn primary" id="btn-upload">🖼🎬 Upload</button>
     <button class="btn primary" id="btn-add">＋ Add Object</button>
+    <button class="btn" id="btn-clear-lines">✏️ Clear Lines</button>
     <button class="btn" id="btn-reset">⟳ Reset</button>
+    <input type="file" id="file-input" accept="image/*,video/*" multiple style="display:none">
   </div>
 </header>
 
+<nav id="mode-bar">
+  <button class="mode-btn active" data-mode="play">🖐 操作 Play</button>
+  <button class="mode-btn" data-mode="draw">✏️ 描く Draw</button>
+  <button class="mode-btn" data-mode="laser">⚡ レーザー Laser</button>
+</nav>
+
 <div id="fps">-- FPS</div>
 <div id="status-badge">🖐 手を検出中… / Detecting hands…</div>
+<div id="gesture-badge"></div>
 
 <div id="cam-wrap">
   <video id="cam-video" autoplay playsinline muted></video>
@@ -142,12 +209,26 @@
 </div>
 
 <div id="help">
-  <div class="hint"><span class="ico">👉</span><b>指差しで選択</b>Point to select<br><span class="en">人差し指を伸ばして狙う</span></div>
-  <div class="hint"><span class="ico">🤏</span><b>ピンチで掴む</b>Pinch to grab<br><span class="en">親指＋人差し指をくっつける</span></div>
-  <div class="hint"><span class="ico">✊➜✋</span><b>動かして操作</b>Move &amp; rotate<br><span class="en">掴んだまま手を動かす</span></div>
-  <div class="hint"><span class="ico">🖐</span><b>開いてリリース</b>Open to release<br><span class="en">慣性で飛んでいく</span></div>
-  <div class="hint"><span class="ico">🙌</span><b>両手対応</b>Both hands<br><span class="en">2つ同時に操作OK</span></div>
+  <div class="help-group active" data-mode="play">
+    <div class="hint"><span class="ico">👉</span><b>指差しで選択</b>Point to select<br><span class="en">人差し指で狙う</span></div>
+    <div class="hint"><span class="ico">🤏</span><b>ピンチで掴む</b>Pinch to grab<br><span class="en">動かして操作・開いてリリース</span></div>
+    <div class="hint"><span class="ico">🖐💨</span><b>力場で押す</b>Force push<br><span class="en">開いた手を素早く動かす</span></div>
+    <div class="hint"><span class="ico">🤏＋✌️</span><b>両手コンボ</b>Combo<br><span class="en">掴んだまま反対の手で ✌️複製 👍拡大 🤙縮小 ✊色替え</span></div>
+    <div class="hint"><span class="ico">⭕</span><b>囲んで複製</b>Circle to clone<br><span class="en">オブジェクトの周りを指で一周</span></div>
+  </div>
+  <div class="help-group" data-mode="draw">
+    <div class="hint"><span class="ico">☝️</span><b>指差しで描く</b>Draw in air<br><span class="en">人差し指だけ伸ばして動かす</span></div>
+    <div class="hint"><span class="ico">⏱</span><b>30秒で消える</b>Auto fade<br><span class="en">描いた線は自動で消えます</span></div>
+    <div class="hint"><span class="ico">✏️</span><b>Clear Lines</b>Erase all<br><span class="en">上のボタンで全消去</span></div>
+  </div>
+  <div class="help-group" data-mode="laser">
+    <div class="hint"><span class="ico">✌️</span><b>ピースで発射</b>Peace to fire<br><span class="en">人差し指＋中指を伸ばす</span></div>
+    <div class="hint"><span class="ico">🎯</span><b>当てて弾く</b>Knock objects<br><span class="en">ビームが当たると弾き飛ぶ</span></div>
+  </div>
 </div>
+
+<div id="drop-zone">🖼🎬 画像・動画をドロップして3D空間に配置 / Drop image or video here</div>
+<div id="toast-wrap"></div>
 
 <div id="loader">
   <div class="spinner"></div>
@@ -317,14 +398,43 @@
     }
   }
 
-  function resetScene() {
-    for (const o of objects) {
-      scene.remove(o);
-      o.geometry.dispose();
-      o.material.dispose();
+  // Clones share geometry / textures / video elements with their source,
+  // so only dispose an asset when no remaining object still uses it.
+  function assetInUse(asset) {
+    if (!asset) return false;
+    for (const other of objects) {
+      let used = false;
+      other.traverse(n => {
+        if (n.isMesh && (n.geometry === asset || n.material.map === asset || n.material.emissiveMap === asset)) used = true;
+      });
+      if (used) return true;
     }
-    objects.length = 0;
+    return false;
+  }
+
+  function disposeObject(o) {
+    const idx = objects.indexOf(o);
+    if (idx >= 0) objects.splice(idx, 1);
+    scene.remove(o);
+    o.traverse(n => {
+      if (!n.isMesh) return;
+      if (!assetInUse(n.geometry)) n.geometry.dispose();
+      if (n.material.map && !assetInUse(n.material.map)) n.material.map.dispose();
+      n.material.dispose();
+    });
+    const v = o.userData.videoEl;
+    if (v && !objects.some(other => other.userData.videoEl === v)) {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+      if (o.userData.videoUrl) URL.revokeObjectURL(o.userData.videoUrl);
+    }
+  }
+
+  function resetScene() {
+    while (objects.length) disposeObject(objects[0]);
     clearParticles();
+    clearStrokes();
     spawnInitialObjects();
   }
 
@@ -334,6 +444,112 @@
   });
 
   spawnInitialObjects();
+
+  /* ============================================================
+   *  Feature 1: Image & video upload (button + drag & drop)
+   * ============================================================ */
+  function createMediaObject(texture, aspect, extra) {
+    const w = aspect >= 1 ? 2.0 : 2.0 * aspect;
+    const h = aspect >= 1 ? 2.0 / aspect : 2.0;
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshStandardMaterial({
+        map: texture, roughness: 0.3, metalness: 0.2, side: THREE.DoubleSide,
+        emissive: 0xffffff, emissiveMap: texture, emissiveIntensity: 0.08
+      })
+    );
+    // Glossy glowing cyan frame so media objects are visually distinct
+    // (video frames glow stronger than image frames)
+    const frame = new THREE.Mesh(
+      new THREE.PlaneGeometry(w + 0.16, h + 0.16),
+      new THREE.MeshStandardMaterial({
+        color: 0x6ee7ff, roughness: 0.15, metalness: 0.9, side: THREE.DoubleSide,
+        emissive: 0x6ee7ff, emissiveIntensity: extra.isVideo ? 0.75 : 0.4
+      })
+    );
+    frame.position.z = -0.015;
+    mesh.add(frame);
+
+    mesh.position.set((Math.random() - 0.5) * 4, 1 + Math.random() * 1.5, 1 + Math.random());
+    mesh.castShadow = true;
+    mesh.userData = Object.assign({
+      baseEmissive: 0.08,
+      baseScale: 1,
+      velocity: new THREE.Vector3(),
+      angularVelocity: new THREE.Vector3(),
+      grabbedBy: null,
+      hovered: false
+    }, extra);
+    scene.add(mesh);
+    objects.push(mesh);
+    spawnBurst(mesh.position, 0x6ee7ff, 22, 2);
+    return mesh;
+  }
+
+  function loadImageFile(file) {
+    const url = URL.createObjectURL(file);
+    new THREE.TextureLoader().load(url, (tex) => {
+      URL.revokeObjectURL(url);
+      const img = tex.image;
+      const aspect = (img && img.width && img.height) ? img.width / img.height : 1;
+      createMediaObject(tex, aspect, { isImage: true });
+      showToast('🖼 画像を配置しました / Image placed');
+    }, undefined, () => {
+      URL.revokeObjectURL(url);
+      console.warn('Failed to load image:', file.name);
+    });
+  }
+
+  function loadVideoFile(file) {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.loop = true;
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.src = url;
+    v.addEventListener('loadeddata', () => {
+      v.play().catch(() => {});
+      const tex = new THREE.VideoTexture(v);
+      const aspect = (v.videoWidth && v.videoHeight) ? v.videoWidth / v.videoHeight : 16 / 9;
+      // Keep url alive while the video plays; revoked in disposeObject
+      createMediaObject(tex, aspect, { isVideo: true, videoEl: v, videoUrl: url });
+      showToast('🎬 動画を配置しました / Video placed');
+    }, { once: true });
+    v.addEventListener('error', () => {
+      URL.revokeObjectURL(url);
+      console.warn('Failed to load video:', file.name);
+    }, { once: true });
+  }
+
+  function loadMediaFile(file) {
+    if (!file) return;
+    if (file.type.startsWith('image/')) loadImageFile(file);
+    else if (file.type.startsWith('video/')) loadVideoFile(file);
+  }
+
+  const fileInput = document.getElementById('file-input');
+  document.getElementById('btn-upload').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    for (const f of fileInput.files) loadMediaFile(f);
+    fileInput.value = '';
+  });
+
+  const dropZone = document.getElementById('drop-zone');
+  let dragDepth = 0;
+  window.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; dropZone.classList.add('show'); });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('dragleave', (e) => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dropZone.classList.remove('show'); } });
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    dropZone.classList.remove('show');
+    if (e.dataTransfer && e.dataTransfer.files) {
+      for (const f of e.dataTransfer.files) loadMediaFile(f);
+    }
+  });
 
   /* ============================================================
    *  Particle system (grab / release bursts)
@@ -396,6 +612,416 @@
   }
 
   /* ============================================================
+   *  Feature 2: Finger drawing (3D air strokes, auto-expire)
+   * ============================================================ */
+  const strokes = [];
+  const STROKE_LIFETIME = 30;   // seconds before a stroke disappears
+  const STROKE_FADE = 3;        // fade-out duration at end of life
+  const MAX_STROKE_POINTS = 600;
+  const nowSec = () => performance.now() / 1000;
+
+  function beginStroke(hs) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_STROKE_POINTS * 3), 3));
+    geo.setDrawRange(0, 0);
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+      color: 0x6ee7ff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+    }));
+    line.frustumCulled = false;
+    scene.add(line);
+    const s = { line, count: 0, createdAt: nowSec(), last: new THREE.Vector3() };
+    strokes.push(s);
+    hs.stroke = s;
+    return s;
+  }
+
+  function addStrokePoint(hs, p) {
+    let s = hs.stroke;
+    if (s && s.count >= MAX_STROKE_POINTS) { hs.stroke = null; s = null; }
+    if (!s) s = beginStroke(hs);
+    if (s.count > 0 && s.last.distanceTo(p) < 0.03) return;
+    const attr = s.line.geometry.attributes.position;
+    attr.array[s.count * 3] = p.x;
+    attr.array[s.count * 3 + 1] = p.y;
+    attr.array[s.count * 3 + 2] = p.z;
+    s.count++;
+    s.last.copy(p);
+    s.line.geometry.setDrawRange(0, s.count);
+    attr.needsUpdate = true;
+  }
+
+  function endStroke(hs) {
+    if (hs.stroke && hs.stroke.count < 2) removeStroke(hs.stroke);
+    hs.stroke = null;
+  }
+
+  function removeStroke(s) {
+    const i = strokes.indexOf(s);
+    if (i >= 0) strokes.splice(i, 1);
+    scene.remove(s.line);
+    s.line.geometry.dispose();
+    s.line.material.dispose();
+    for (const label in handStates) {
+      if (handStates[label].stroke === s) handStates[label].stroke = null;
+    }
+  }
+
+  function updateStrokes() {
+    const t = nowSec();
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      const age = t - s.createdAt;
+      if (age > STROKE_LIFETIME) { removeStroke(s); continue; }
+      if (age > STROKE_LIFETIME - STROKE_FADE) {
+        s.line.material.opacity = 0.95 * (STROKE_LIFETIME - age) / STROKE_FADE;
+      }
+    }
+  }
+
+  function clearStrokes() {
+    while (strokes.length) removeStroke(strokes[0]);
+  }
+
+  document.getElementById('btn-clear-lines').addEventListener('click', clearStrokes);
+
+  /* ============================================================
+   *  Modes: features are split per screen to avoid gesture conflicts
+   *  play  = select / grab / force push / combos / circle-clone
+   *  draw  = finger drawing only
+   *  laser = peace-sign laser only
+   * ============================================================ */
+  let mode = 'play';
+  const MODE_NAMES = {
+    play: '🖐 操作モード / Play mode',
+    draw: '✏️ 描画モード / Draw mode',
+    laser: '⚡ レーザーモード / Laser mode'
+  };
+
+  function setMode(m) {
+    if (mode === m) return;
+    mode = m;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    document.querySelectorAll('.help-group').forEach(g => g.classList.toggle('active', g.dataset.mode === m));
+    document.getElementById('btn-clear-lines').style.display = m === 'draw' ? '' : 'none';
+    // Reset transient per-hand state so nothing carries across modes
+    for (const label in handStates) {
+      const hs = handStates[label];
+      if (hs.grabbed) releaseObject(hs);
+      endStroke(hs);
+      hideLaser(hs);
+      hs.trail.length = 0;
+      hs.comboPrev = null;
+      setHover(hs, null);
+    }
+    showToast(MODE_NAMES[m]);
+  }
+
+  document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  document.getElementById('btn-clear-lines').style.display = 'none'; // shown in draw mode only
+
+  /* ============================================================
+   *  Feature 3: Palm force field (push objects + ripple FX)
+   * ============================================================ */
+  const FORCE_RADIUS = 1.5;
+  const ripples = [];
+
+  function spawnRipple(pos, color = 0x6ee7ff) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.25, 0.34, 48),
+      new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.8,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    ring.position.copy(pos);
+    ring.lookAt(camera.position);
+    scene.add(ring);
+    ripples.push({ mesh: ring, life: 1 });
+  }
+
+  function updateRipples(dt) {
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      r.life -= dt * 1.8;
+      if (r.life <= 0) {
+        scene.remove(r.mesh);
+        r.mesh.geometry.dispose();
+        r.mesh.material.dispose();
+        ripples.splice(i, 1);
+        continue;
+      }
+      const s = 1 + (1 - r.life) * 4.5;
+      r.mesh.scale.setScalar(s);
+      r.mesh.material.opacity = 0.8 * r.life;
+    }
+  }
+
+  function applyForceField(hs) {
+    const speed = hs.worldVelocity.length();
+    if (speed < 1.6) return; // require actual hand motion
+    for (const o of objects) {
+      if (o.userData.grabbedBy) continue;
+      const d = o.position.distanceTo(hs.palmWorld);
+      if (d > FORCE_RADIUS) continue;
+      const falloff = 1 - d / FORCE_RADIUS;
+      // Push strength proportional to hand speed
+      const dir = o.position.clone().sub(hs.palmWorld);
+      if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+      dir.normalize();
+      o.userData.velocity.addScaledVector(dir, speed * falloff * 0.14);
+      o.userData.angularVelocity.x += (Math.random() - 0.5) * falloff;
+      o.userData.angularVelocity.y += (Math.random() - 0.5) * falloff;
+    }
+    if (speed > 2.4 && nowSec() - hs.lastRipple > 0.35) {
+      hs.lastRipple = nowSec();
+      spawnRipple(hs.palmWorld);
+      spawnBurst(hs.palmWorld, 0x6ee7ff, 16, Math.min(speed, 5));
+    }
+  }
+
+  /* ============================================================
+   *  Feature 4: Two-finger laser (peace sign)
+   * ============================================================ */
+  function makeLaser() {
+    const group = new THREE.Group();
+    group.visible = false;
+
+    const coreGeo = new THREE.BufferGeometry();
+    coreGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    const core = new THREE.Line(coreGeo, new THREE.LineBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+    }));
+    core.frustumCulled = false;
+
+    // Glow: thin additive cylinder stretched along the beam
+    const glow = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.028, 0.028, 1, 8, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0x6ee7ff, transparent: true, opacity: 0.35,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    glow.frustumCulled = false;
+
+    const hitDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 12, 8),
+      new THREE.MeshBasicMaterial({
+        color: 0x6ee7ff, transparent: true, opacity: 0.9,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      })
+    );
+    hitDot.visible = false;
+
+    group.add(core, glow, hitDot);
+    scene.add(group);
+    return { group, core, glow, hitDot };
+  }
+
+  const LASER_UP = new THREE.Vector3(0, 1, 0);
+  function updateLaser(hs) {
+    if (!hs.laser) hs.laser = makeLaser();
+    const L = hs.laser;
+    L.group.visible = true;
+
+    raycaster.setFromCamera(hs.pointer, camera);
+    const dir = raycaster.ray.direction;
+    const origin = hs.indexTipWorld;
+
+    const hits = raycaster.intersectObjects(objects, false);
+    let len = 30, hit = null;
+    if (hits.length) {
+      hit = hits[0];
+      len = Math.max(0.2, origin.distanceTo(hit.point));
+    }
+    const end = origin.clone().addScaledVector(dir, len);
+
+    // Core line
+    const arr = L.core.geometry.attributes.position.array;
+    arr[0] = origin.x; arr[1] = origin.y; arr[2] = origin.z;
+    arr[3] = end.x; arr[4] = end.y; arr[5] = end.z;
+    L.core.geometry.attributes.position.needsUpdate = true;
+
+    // Glow cylinder: position at midpoint, orient along beam
+    L.glow.position.copy(origin).add(end).multiplyScalar(0.5);
+    L.glow.scale.set(1, len, 1);
+    L.glow.quaternion.setFromUnitVectors(LASER_UP, dir);
+
+    if (hit && !hit.object.userData.grabbedBy) {
+      // Nudge the hit object away along the beam
+      hit.object.userData.velocity.addScaledVector(dir, 0.22);
+      hit.object.userData.angularVelocity.y += 0.4;
+      L.hitDot.visible = true;
+      L.hitDot.position.copy(hit.point);
+      if (nowSec() - hs.lastSpark > 0.25) {
+        hs.lastSpark = nowSec();
+        spawnBurst(hit.point, 0x6ee7ff, 10, 1.6);
+      }
+    } else {
+      L.hitDot.visible = false;
+    }
+  }
+
+  function hideLaser(hs) {
+    if (hs.laser) hs.laser.group.visible = false;
+  }
+
+  /* ============================================================
+   *  Toast notifications (UI feedback at screen edge)
+   * ============================================================ */
+  const toastWrap = document.getElementById('toast-wrap');
+  function showToast(text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    toastWrap.appendChild(el);
+    setTimeout(() => el.remove(), 2400);
+  }
+
+  /* ============================================================
+   *  Object duplication (used by combos and circle-trace)
+   * ============================================================ */
+  function cloneObject(src) {
+    // Geometry and textures are shared with the source; materials are cloned
+    // so highlight / recolor stays independent per object.
+    const mesh = new THREE.Mesh(src.geometry, src.material.clone());
+    for (const c of src.children) {
+      if (!c.isMesh) continue;
+      const child = new THREE.Mesh(c.geometry, c.material.clone());
+      child.position.copy(c.position);
+      mesh.add(child);
+    }
+    mesh.rotation.copy(src.rotation);
+    mesh.castShadow = true;
+    mesh.receiveShadow = src.receiveShadow;
+    mesh.userData = {
+      baseEmissive: src.userData.baseEmissive,
+      baseScale: src.userData.baseScale,
+      velocity: new THREE.Vector3(),
+      angularVelocity: new THREE.Vector3(),
+      grabbedBy: null,
+      hovered: false,
+      isImage: src.userData.isImage || false,
+      isVideo: src.userData.isVideo || false,
+      videoEl: src.userData.videoEl || null,
+      videoUrl: src.userData.videoUrl || null
+    };
+    mesh.scale.setScalar(mesh.userData.baseScale);
+    scene.add(mesh);
+    objects.push(mesh);
+    return mesh;
+  }
+
+  function duplicateObject(src, ringColor) {
+    const copy = cloneObject(src);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    copy.position.copy(src.position).add(new THREE.Vector3(side * 1.1, 0.25, 0.1));
+    copy.userData.velocity.set(side * 0.8, 0.6, 0);
+    spawnRipple(copy.position, ringColor);
+    spawnBurst(copy.position, ringColor, 20, 2.2);
+    return copy;
+  }
+
+  /* ============================================================
+   *  Feature: two-hand combo gestures
+   *  (free hand casts an effect on the object the other hand holds)
+   * ============================================================ */
+  function applyCombo(action, mesh) {
+    const ud = mesh.userData;
+    if (action === 'duplicate') {
+      duplicateObject(mesh, 0x6ee7ff);
+      showToast('✌️ 複製！ / Duplicated');
+    } else if (action === 'grow') {
+      ud.baseScale = Math.min(ud.baseScale * 1.5, 3.0);
+      spawnBurst(mesh.position, 0x7cff9b, 22, 2.5);
+      showToast('👍 拡大 ×1.5 / Grow');
+    } else if (action === 'shrink') {
+      ud.baseScale = Math.max(ud.baseScale * 0.67, 0.25);
+      spawnBurst(mesh.position, 0xffc857, 22, 2.0);
+      showToast('🤙 縮小 ×0.67 / Shrink');
+    } else if (action === 'recolor') {
+      let color = mesh.material.color.getHex();
+      while (color === mesh.material.color.getHex()) {
+        color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+      }
+      mesh.material.color.setHex(color);
+      if (mesh.material.emissive) mesh.material.emissive.setHex(color);
+      spawnBurst(mesh.position, color, 26, 2.6);
+      showToast('✊ カラーチェンジ / Recolor');
+    }
+  }
+
+  /* ============================================================
+   *  Feature: circle-trace duplication
+   *  Draw a closed circle with the index finger (< 0.8 s) around
+   *  an object to clone it.
+   * ============================================================ */
+  const CIRCLE_WINDOW = 0.8;   // seconds of trail considered
+  const CIRCLE_COOLDOWN = 1.2;
+
+  function updateTrail(hs) {
+    const t = nowSec();
+    hs.trail.push({ x: hs.indexTipWorld.x, y: hs.indexTipWorld.y, t });
+    while (hs.trail.length && t - hs.trail[0].t > CIRCLE_WINDOW) hs.trail.shift();
+    detectCircle(hs, t);
+  }
+
+  function detectCircle(hs, t) {
+    if (t - hs.lastCircle < CIRCLE_COOLDOWN) return;
+    const pts = hs.trail;
+    if (pts.length < 14) return;
+
+    let cx = 0, cy = 0;
+    for (const p of pts) { cx += p.x; cy += p.y; }
+    cx /= pts.length; cy /= pts.length;
+
+    // Mean radius must be within spec (0.5 - 2.0 world units, small tolerance)
+    let meanR = 0;
+    for (const p of pts) meanR += Math.hypot(p.x - cx, p.y - cy);
+    meanR /= pts.length;
+    if (meanR < 0.45 || meanR > 2.1) return;
+
+    // Roundness: low deviation from the mean radius
+    let dev = 0;
+    for (const p of pts) dev += Math.abs(Math.hypot(p.x - cx, p.y - cy) - meanR);
+    dev /= pts.length;
+    if (dev / meanR > 0.3) return;
+
+    // Angular sweep close to a full turn
+    let sweep = 0;
+    let prev = Math.atan2(pts[0].y - cy, pts[0].x - cx);
+    for (let i = 1; i < pts.length; i++) {
+      const a = Math.atan2(pts[i].y - cy, pts[i].x - cx);
+      let d = a - prev;
+      if (d > Math.PI) d -= Math.PI * 2;
+      if (d < -Math.PI) d += Math.PI * 2;
+      sweep += d;
+      prev = a;
+    }
+    if (Math.abs(sweep) < Math.PI * 1.7) return;
+
+    // Closed: start and end of trail near each other
+    const gap = Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y);
+    if (gap > meanR * 0.6) return;
+
+    // Find nearest free object to the circle center
+    const center = new THREE.Vector3(cx, cy, hs.indexTipWorld.z);
+    let best = null, bestDist = meanR + 1.2;
+    for (const o of objects) {
+      if (o.userData.grabbedBy) continue;
+      const d = o.position.distanceTo(center);
+      if (d < bestDist) { best = o; bestDist = d; }
+    }
+    if (!best) return;
+
+    hs.lastCircle = t;
+    hs.trail.length = 0;
+    const copy = duplicateObject(best, 0xffc857);
+    spawnRipple(best.position, 0xffc857);
+    spawnRipple(copy.position, 0xffffff);
+    showToast('⭕ 輪郭なぞりで複製！ / Circle-clone');
+  }
+
+  /* ============================================================
    *  Hand tracking state (supports 2 hands)
    * ============================================================ */
   // Per-hand state, keyed by handedness label ('Left' / 'Right')
@@ -416,7 +1042,17 @@
         grabOffset: new THREE.Vector3(),
         hovered: null,
         cursor: makeCursor(),
-        smoothedLm: null
+        smoothedLm: null,
+        indexTipWorld: new THREE.Vector3(),  // fingertip in world (drawing / laser origin)
+        palmWorld: new THREE.Vector3(),      // palm center in world (force field)
+        stroke: null,
+        laser: null,
+        lastRipple: 0,
+        lastSpark: 0,
+        trail: [],           // recent fingertip path for circle detection
+        lastCircle: 0,
+        comboPrev: null,     // last combo gesture (rising-edge trigger)
+        lastCombo: 0
       };
     }
     return handStates[label];
@@ -459,12 +1095,18 @@
     const midExt = fingerExtended(lm, 12, 10);
     const ringExt = fingerExtended(lm, 16, 14);
     const pinkyExt = fingerExtended(lm, 20, 18);
+    // Thumb is short: compare tip vs MCP distance from wrist
+    const thumbExt = lmDist(lm[4], lm[0]) > lmDist(lm[2], lm[0]) * 1.25;
     const extCount = [idxExt, midExt, ringExt, pinkyExt].filter(Boolean).length;
 
     return {
       pinching,
       pointing: idxExt && !midExt && !ringExt,
-      openPalm: extCount >= 4 && !pinching
+      peace: idxExt && midExt && !ringExt && !pinkyExt && !pinching,
+      openPalm: extCount >= 4 && !pinching,
+      thumbsUp: thumbExt && extCount === 0 && !pinching,
+      pinkyOnly: pinkyExt && !idxExt && !midExt && !ringExt && !thumbExt && !pinching,
+      fist: !thumbExt && extCount === 0 && !pinching
     };
   }
 
@@ -481,6 +1123,7 @@
   }
 
   const statusBadge = document.getElementById('status-badge');
+  const gestureBadge = document.getElementById('gesture-badge');
 
   function onResults(results) {
     // Draw landmarks on preview canvas
@@ -528,6 +1171,8 @@
 
       hs.prevWorldPos.copy(hs.worldPos);
       lmToWorld(pinchMidX, pinchMidY, hs.worldPos);
+      lmToWorld(lm[8].x, lm[8].y, hs.indexTipWorld);   // fingertip for drawing / laser
+      lmToWorld(lm[9].x, lm[9].y, hs.palmWorld);       // palm center for force field
 
       hs.wasPinching = hs.pinching;
       hs.pinching = g.pinching;
@@ -545,9 +1190,23 @@
         hs.pinching = false;
         hs.smoothedLm = null;
         hs.cursor.visible = false;
+        endStroke(hs);
+        hideLaser(hs);
+        hs.trail.length = 0;
+        hs.comboPrev = null;
+        hs.gestureName = '';
         setHover(hs, null);
       }
     }
+
+    // Live gesture indicator
+    const gnames = [];
+    for (const label in handStates) {
+      const hs = handStates[label];
+      if (hs.visible && hs.gestureName) gnames.push(hs.gestureName);
+    }
+    gestureBadge.textContent = gnames.join('　');
+    gestureBadge.classList.toggle('show', gnames.length > 0);
 
     if (nHands > 0) {
       statusBadge.classList.add('active');
@@ -599,6 +1258,17 @@
   }
 
   function handleInteraction(hs, gestures) {
+    // Live gesture label for the on-screen indicator
+    hs.gestureName = hs.grabbed ? '✊ 掴み中 Grab'
+      : hs.pinching ? '🤏 ピンチ Pinch'
+      : gestures.peace ? '✌️ ピース Peace'
+      : gestures.pointing ? '👉 指差し Point'
+      : gestures.openPalm ? '🖐 オープン Open'
+      : gestures.thumbsUp ? '👍 サムズアップ'
+      : gestures.pinkyOnly ? '🤙 小指'
+      : gestures.fist ? '✊ グー Fist'
+      : '';
+
     // Cursor follows hand
     hs.cursor.visible = true;
     hs.cursor.position.copy(hs.worldPos);
@@ -606,6 +1276,11 @@
     hs.cursor.material.color.setHex(hs.grabbed ? 0xffc857 : (hs.pinching ? 0xff7ad9 : 0x6ee7ff));
 
     if (hs.grabbed) {
+      // While holding: no drawing, no laser, no circle detection
+      endStroke(hs);
+      hideLaser(hs);
+      hs.trail.length = 0;
+
       // Move grabbed object with hand; add gentle rotation from motion
       const target = hs.worldPos.clone().add(hs.grabOffset);
       hs.grabbed.position.lerp(target, 0.55);
@@ -619,6 +1294,47 @@
       }
       return;
     }
+
+    // Two-hand combos (play mode): if the other hand holds an object,
+    // this free hand's gesture casts an effect on it (rising-edge triggered).
+    const otherHolder = mode === 'play'
+      ? Object.values(handStates).find(o => o !== hs && o.visible && o.grabbed) : null;
+    if (otherHolder) {
+      const combo = gestures.peace ? 'duplicate'
+        : gestures.thumbsUp ? 'grow'
+        : gestures.pinkyOnly ? 'shrink'
+        : gestures.fist ? 'recolor' : null;
+      if (combo && combo !== hs.comboPrev && nowSec() - hs.lastCombo > 0.8) {
+        hs.lastCombo = nowSec();
+        applyCombo(combo, otherHolder.grabbed);
+      }
+      hs.comboPrev = combo;
+    } else {
+      hs.comboPrev = null;
+    }
+
+    // Laser mode: peace sign fires the beam
+    if (mode === 'laser' && gestures.peace) updateLaser(hs); else hideLaser(hs);
+
+    // Draw mode: index finger paints strokes (never while pinching)
+    if (mode === 'draw' && gestures.pointing && !hs.pinching) {
+      addStrokePoint(hs, hs.indexTipWorld);
+    } else {
+      endStroke(hs);
+    }
+
+    // Play mode: pointing also feeds the circle-trace duplication detector
+    if (mode === 'play' && gestures.pointing && !hs.pinching) {
+      updateTrail(hs);
+    } else {
+      hs.trail.length = 0;
+    }
+
+    // Play mode: open-palm force field
+    if (mode === 'play' && gestures.openPalm) applyForceField(hs);
+
+    // Grabbing / hovering only in play mode
+    if (mode !== 'play') { setHover(hs, null); return; }
 
     // Raycast from index-finger pointer for selection highlight
     if (gestures.pointing || hs.pinching) {
@@ -724,6 +1440,8 @@
     updateHandVelocities(dt);
     updateObjects(dt, time);
     updateParticles(dt);
+    updateStrokes();
+    updateRipples(dt);
 
     // FPS (update label ~2x/sec)
     fpsAccum += dt; fpsFrames++; fpsTimer += dt;
@@ -802,6 +1520,9 @@
       if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
         showError('カメラの使用が拒否されました',
           'HandForge は手の動きをトラッキングするためにカメラが必要です。<br>ブラウザのアドレスバーのカメラアイコンから許可して、再試行してください。<br><br>Camera access was denied. Please allow camera access in your browser settings and retry.');
+      } else if (err && (err.name === 'NotReadableError' || /in use/i.test(err.message || ''))) {
+        showError('カメラが他のアプリで使用中です',
+          '別のアプリやブラウザタブ（Zoom / Teams / 他のHandForgeタブなど）がカメラを使用しています。<br>そちらを閉じてから「再試行」を押してください。<br><br>The camera is in use by another app or tab. Close it and retry.');
       } else if (err && err.name === 'NotFoundError') {
         showError('カメラが見つかりません',
           'カメラデバイスが検出できませんでした。カメラを接続して再試行してください。<br>No camera device was found.');
