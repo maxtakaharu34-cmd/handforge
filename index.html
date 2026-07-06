@@ -6,22 +6,26 @@
 <title>HandForge — Gesture 3D Playground</title>
 <style>
   :root {
-    --accent: #6ee7ff;
-    --accent2: #b388ff;
-    --glass-bg: rgba(15, 20, 35, 0.55);
-    --glass-border: rgba(255, 255, 255, 0.12);
+    --ink: rgba(13, 10, 7, 0.88);      /* warm lacquer panels */
+    --paper: #f2e8d5;                  /* unbleached paper text */
+    --muted: #9b8f7a;
+    --ember: #e8622c;                  /* forge ember */
+    --brass: #d9a441;
+    --line: rgba(242, 232, 213, 0.16);
+    --serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+    --sans: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif;
+    --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; font-family: 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif; color: #e8ecf4; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0906; font-family: var(--sans); color: var(--paper); }
 
   #scene-canvas { position: fixed; inset: 0; display: block; }
 
   /* Camera preview (mirrored, small) */
   #cam-wrap {
     position: fixed; right: 16px; bottom: 16px; width: 200px; height: 150px;
-    border-radius: 14px; overflow: hidden; z-index: 20;
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    border-radius: 3px; overflow: hidden; z-index: 20;
+    border: 1px solid var(--line);
     background: #000;
   }
   #cam-video, #cam-overlay {
@@ -33,122 +37,121 @@
   header {
     position: fixed; top: 0; left: 0; right: 0; z-index: 30;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 22px;
-    background: linear-gradient(180deg, rgba(8,12,22,.85), rgba(8,12,22,.35) 80%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255,255,255,.06);
+    padding: 12px 22px;
+    background: var(--ink);
+    border-bottom: 1px solid var(--line);
   }
-  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  /* Signature: vermilion seal stamp with 手 */
   .brand .logo {
-    width: 34px; height: 34px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    display: grid; place-items: center; font-size: 18px;
-    box-shadow: 0 0 18px rgba(110,231,255,.45);
+    width: 36px; height: 36px; border-radius: 2px;
+    background: var(--ember);
+    display: grid; place-items: center;
+    font-family: var(--serif); font-size: 22px; font-weight: 600; color: #0b0906;
   }
   .brand h1 {
-    font-size: 20px; font-weight: 700; letter-spacing: .06em;
-    background: linear-gradient(90deg, #fff, var(--accent));
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    font-family: var(--serif); font-size: 21px; font-weight: 600;
+    letter-spacing: .12em; color: var(--paper);
   }
-  .brand small { display: block; font-size: 10px; color: #7f8ba3; letter-spacing: .2em; text-transform: uppercase; }
-  .controls { display: flex; gap: 10px; }
+  .brand small {
+    display: block; font-size: 10px; color: var(--muted);
+    letter-spacing: .3em; text-transform: uppercase; font-family: var(--mono);
+  }
+  .controls { display: flex; gap: 8px; }
   .btn {
-    padding: 9px 18px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;
-    color: #e8ecf4; background: var(--glass-bg); border: 1px solid var(--glass-border);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    transition: all .2s ease;
+    padding: 8px 16px; border-radius: 2px; cursor: pointer; font-size: 13px;
+    letter-spacing: .06em; font-family: var(--sans);
+    color: var(--paper); background: transparent; border: 1px solid var(--line);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
   }
-  .btn:hover { border-color: var(--accent); box-shadow: 0 0 16px rgba(110,231,255,.35); transform: translateY(-1px); }
+  .btn:hover { border-color: var(--ember); color: #fff; }
   .btn.primary {
-    background: linear-gradient(135deg, rgba(110,231,255,.25), rgba(179,136,255,.25));
-    border-color: rgba(110,231,255,.5);
+    background: var(--ember); border-color: var(--ember); color: #0b0906; font-weight: 700;
   }
+  .btn.primary:hover { background: #f0733e; }
 
   /* FPS */
   #fps {
-    position: fixed; top: 70px; right: 16px; z-index: 30;
-    padding: 6px 14px; border-radius: 10px; font-size: 12px; font-variant-numeric: tabular-nums;
-    background: var(--glass-bg); border: 1px solid var(--glass-border);
-    backdrop-filter: blur(10px); color: var(--accent);
+    position: fixed; top: 74px; right: 16px; z-index: 30;
+    padding: 5px 12px; border-radius: 2px; font-size: 11.5px;
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    background: var(--ink); border: 1px solid var(--line); color: var(--muted);
   }
 
   /* Help overlay */
   #help {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-    z-index: 25; max-width: 720px; width: calc(100% - 260px);
-    padding: 12px 20px; border-radius: 16px;
-    background: var(--glass-bg); border: 1px solid var(--glass-border);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    z-index: 25; max-width: 760px; width: calc(100% - 260px);
+    padding: 12px 20px; border-radius: 3px;
+    background: var(--ink); border: 1px solid var(--line);
     display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
-    box-shadow: 0 8px 32px rgba(0,0,0,.4);
   }
-  .hint { text-align: center; font-size: 11.5px; line-height: 1.5; color: #aeb8cc; }
-  .hint b { display: block; font-size: 13px; color: #fff; }
-  .hint span.en { color: #7f8ba3; font-size: 10.5px; }
+  .hint { text-align: center; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+  .hint b { display: block; font-size: 13px; color: var(--paper); letter-spacing: .04em; }
+  .hint span.en { color: var(--muted); font-size: 10.5px; }
   .hint .ico { font-size: 20px; display: block; margin-bottom: 2px; }
 
   /* Loading / error screens */
   #loader, #error-screen {
     position: fixed; inset: 0; z-index: 100;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-    background: radial-gradient(ellipse at 50% 40%, #0c1424 0%, #05070d 70%);
+    background: #0b0906;
     text-align: center; padding: 24px; transition: opacity .6s ease;
   }
   #error-screen { display: none; }
   .spinner {
     width: 54px; height: 54px; border-radius: 50%;
-    border: 3px solid rgba(110,231,255,.15); border-top-color: var(--accent);
+    border: 2px solid rgba(232,98,44,.2); border-top-color: var(--ember);
     animation: spin 1s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #loader h2, #error-screen h2 { font-size: 22px; font-weight: 700; letter-spacing: .04em; }
-  #loader p, #error-screen p { color: #8b96ad; font-size: 13.5px; line-height: 1.7; max-width: 460px; }
+  #loader h2, #error-screen h2 {
+    font-family: var(--serif); font-size: 23px; font-weight: 600; letter-spacing: .1em;
+  }
+  #loader p, #error-screen p { color: var(--muted); font-size: 13.5px; line-height: 1.8; max-width: 460px; }
   .fade-out { opacity: 0; pointer-events: none; }
 
   #status-badge {
-    position: fixed; top: 70px; left: 16px; z-index: 30;
-    padding: 6px 14px; border-radius: 10px; font-size: 12px;
-    background: var(--glass-bg); border: 1px solid var(--glass-border);
-    backdrop-filter: blur(10px); color: #8b96ad;
+    position: fixed; top: 74px; left: 16px; z-index: 30;
+    padding: 5px 12px; border-radius: 2px; font-size: 12px;
+    background: var(--ink); border: 1px solid var(--line); color: var(--muted);
   }
-  #status-badge.active { color: #7CFF9B; border-color: rgba(124,255,155,.4); }
+  #status-badge.active { color: var(--brass); border-color: rgba(217,164,65,.45); }
 
   /* Image drag & drop overlay */
   #drop-zone {
     position: fixed; inset: 12px; z-index: 90;
     display: none; align-items: center; justify-content: center;
-    background: rgba(8,12,22,.72); border: 2px dashed var(--accent); border-radius: 20px;
-    font-size: 20px; font-weight: 600; color: var(--accent);
-    backdrop-filter: blur(6px); pointer-events: none;
+    background: rgba(11,9,6,.8); border: 1px dashed var(--ember); border-radius: 3px;
+    font-family: var(--serif); font-size: 20px; letter-spacing: .08em; color: var(--paper);
+    pointer-events: none;
   }
   #drop-zone.show { display: flex; }
 
-  /* Mode switcher (segmented control) */
+  /* Mode switcher: flat tabs, active marked by an ember rule */
   #mode-bar {
-    position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 30;
-    display: flex; gap: 4px; padding: 4px; border-radius: 999px;
-    background: var(--glass-bg); border: 1px solid var(--glass-border);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    position: fixed; top: 61px; left: 50%; transform: translateX(-50%); z-index: 30;
+    display: flex;
+    background: var(--ink); border: 1px solid var(--line); border-top: none;
+    border-radius: 0 0 3px 3px;
   }
   .mode-btn {
-    padding: 8px 20px; border-radius: 999px; border: none; cursor: pointer;
-    background: transparent; color: #8b96ad; font-size: 13px; font-weight: 600;
-    font-family: inherit; transition: all .2s ease; white-space: nowrap;
+    padding: 10px 24px 8px; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    background: transparent; color: var(--muted); font-size: 13.5px;
+    font-family: var(--serif); letter-spacing: .1em;
+    transition: color .15s ease, border-color .15s ease; white-space: nowrap;
   }
-  .mode-btn:hover { color: #fff; }
-  .mode-btn.active {
-    background: linear-gradient(135deg, rgba(110,231,255,.3), rgba(179,136,255,.3));
-    color: #fff; box-shadow: 0 0 14px rgba(110,231,255,.35);
-  }
+  .mode-btn + .mode-btn { border-left: 1px solid var(--line); }
+  .mode-btn:hover { color: var(--paper); }
+  .mode-btn.active { color: var(--paper); border-bottom-color: var(--ember); }
 
   /* Live gesture indicator */
   #gesture-badge {
     position: fixed; top: 108px; left: 16px; z-index: 30;
-    padding: 6px 14px; border-radius: 10px; font-size: 12.5px;
-    background: var(--glass-bg); border: 1px solid var(--glass-border);
-    backdrop-filter: blur(10px); color: var(--accent); display: none;
+    padding: 5px 12px; border-radius: 2px; font-size: 12.5px;
+    background: var(--ink); border: 1px solid var(--line);
+    color: var(--paper); display: none;
   }
   #gesture-badge.show { display: block; }
 
@@ -162,10 +165,8 @@
     display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none;
   }
   .toast {
-    padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 600; color: #fff;
-    background: var(--glass-bg); border: 1px solid var(--accent);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 0 18px rgba(110,231,255,.35);
+    padding: 10px 16px; border-radius: 2px; font-size: 13.5px; color: var(--paper);
+    background: var(--ink); border: 1px solid var(--line); border-left: 3px solid var(--ember);
     animation: toast-in .25s ease, toast-out .4s ease 1.8s forwards;
   }
   @keyframes toast-in { from { opacity: 0; transform: translateX(-14px); } }
@@ -178,25 +179,25 @@
 
 <header>
   <div class="brand">
-    <div class="logo">✋</div>
+    <div class="logo">手</div>
     <div>
       <h1>HandForge</h1>
-      <small>Gesture-Driven 3D</small>
+      <small>手で鍛える三次元工房</small>
     </div>
   </div>
   <div class="controls">
-    <button class="btn primary" id="btn-upload">🖼🎬 Upload</button>
-    <button class="btn primary" id="btn-add">＋ Add Object</button>
-    <button class="btn" id="btn-clear-lines">✏️ Clear Lines</button>
-    <button class="btn" id="btn-reset">⟳ Reset</button>
+    <button class="btn primary" id="btn-upload" title="Upload image / video">画像・動画を置く</button>
+    <button class="btn" id="btn-add" title="Add object">かたちを足す</button>
+    <button class="btn" id="btn-clear-lines" title="Clear lines">線を消す</button>
+    <button class="btn" id="btn-reset" title="Reset">はじめから</button>
     <input type="file" id="file-input" accept="image/*,video/*" multiple style="display:none">
   </div>
 </header>
 
 <nav id="mode-bar">
-  <button class="mode-btn active" data-mode="play">🖐 操作 Play</button>
-  <button class="mode-btn" data-mode="draw">✏️ 描く Draw</button>
-  <button class="mode-btn" data-mode="laser">⚡ レーザー Laser</button>
+  <button class="mode-btn active" data-mode="play">操る</button>
+  <button class="mode-btn" data-mode="draw">描く</button>
+  <button class="mode-btn" data-mode="laser">射る</button>
 </nav>
 
 <div id="fps">-- FPS</div>
@@ -219,7 +220,7 @@
   <div class="help-group" data-mode="draw">
     <div class="hint"><span class="ico">☝️</span><b>指差しで描く</b>Draw in air<br><span class="en">人差し指だけ伸ばして動かす</span></div>
     <div class="hint"><span class="ico">⏱</span><b>30秒で消える</b>Auto fade<br><span class="en">描いた線は自動で消えます</span></div>
-    <div class="hint"><span class="ico">✏️</span><b>Clear Lines</b>Erase all<br><span class="en">上のボタンで全消去</span></div>
+    <div class="hint"><span class="ico">✏️</span><b>線を消す</b>Erase all<br><span class="en">右上のボタンで全消去</span></div>
   </div>
   <div class="help-group" data-mode="laser">
     <div class="hint"><span class="ico">✌️</span><b>ピースで発射</b>Peace to fire<br><span class="en">人差し指＋中指を伸ばす</span></div>
@@ -227,7 +228,7 @@
   </div>
 </div>
 
-<div id="drop-zone">🖼🎬 画像・動画をドロップして3D空間に配置 / Drop image or video here</div>
+<div id="drop-zone">ここに落とすと、3D空間に置かれます — Drop image or video</div>
 <div id="toast-wrap"></div>
 
 <div id="loader">
@@ -293,16 +294,16 @@
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x05070d);
-  scene.fog = new THREE.Fog(0x05070d, 14, 34);
+  scene.background = new THREE.Color(0x0b0906);
+  scene.fog = new THREE.Fog(0x0b0906, 14, 34);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 1.6, 8);
   camera.lookAt(0, 0.8, 0);
 
   // Lighting: ambient + hemisphere + multiple directionals
-  scene.add(new THREE.AmbientLight(0x334466, 0.5));
-  scene.add(new THREE.HemisphereLight(0x88aaff, 0x141824, 0.55));
+  scene.add(new THREE.AmbientLight(0x4a3c2c, 0.5));
+  scene.add(new THREE.HemisphereLight(0xffe0b3, 0x191307, 0.55));
 
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
   keyLight.position.set(5, 9, 6);
@@ -312,18 +313,18 @@
   keyLight.shadow.camera.top = 12; keyLight.shadow.camera.bottom = -12;
   scene.add(keyLight);
 
-  const rimLight = new THREE.DirectionalLight(0x6ee7ff, 0.6);
+  const rimLight = new THREE.DirectionalLight(0xd9a441, 0.6);
   rimLight.position.set(-6, 4, -4);
   scene.add(rimLight);
 
-  const fillLight = new THREE.DirectionalLight(0xb388ff, 0.35);
+  const fillLight = new THREE.DirectionalLight(0x9c6b45, 0.35);
   fillLight.position.set(0, -3, 5);
   scene.add(fillLight);
 
   // Floor
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(60, 60),
-    new THREE.MeshStandardMaterial({ color: 0x0b1020, roughness: 0.85, metalness: 0.2 })
+    new THREE.MeshStandardMaterial({ color: 0x151008, roughness: 0.85, metalness: 0.2 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -2.2;
@@ -331,7 +332,7 @@
   scene.add(floor);
 
   // Subtle grid
-  const grid = new THREE.GridHelper(60, 60, 0x1c2a4a, 0x101828);
+  const grid = new THREE.GridHelper(60, 60, 0x33281a, 0x1a140c);
   grid.position.y = -2.19;
   scene.add(grid);
 
@@ -465,8 +466,8 @@
     const frame = new THREE.Mesh(
       new THREE.PlaneGeometry(w + 0.16, h + 0.16),
       new THREE.MeshStandardMaterial({
-        color: 0x6ee7ff, roughness: 0.15, metalness: 0.9, side: THREE.DoubleSide,
-        emissive: 0x6ee7ff, emissiveIntensity: extra.isVideo ? 0.75 : 0.4
+        color: 0xd9a441, roughness: 0.15, metalness: 0.9, side: THREE.DoubleSide,
+        emissive: 0xd9a441, emissiveIntensity: extra.isVideo ? 0.75 : 0.4
       })
     );
     frame.position.z = -0.015;
@@ -484,7 +485,7 @@
     }, extra);
     scene.add(mesh);
     objects.push(mesh);
-    spawnBurst(mesh.position, 0x6ee7ff, 22, 2);
+    spawnBurst(mesh.position, 0xd9a441, 22, 2);
     return mesh;
   }
 
@@ -495,7 +496,7 @@
       const img = tex.image;
       const aspect = (img && img.width && img.height) ? img.width / img.height : 1;
       createMediaObject(tex, aspect, { isImage: true });
-      showToast('🖼 画像を配置しました / Image placed');
+      showToast('画像を置きました');
     }, undefined, () => {
       URL.revokeObjectURL(url);
       console.warn('Failed to load image:', file.name);
@@ -516,7 +517,7 @@
       const aspect = (v.videoWidth && v.videoHeight) ? v.videoWidth / v.videoHeight : 16 / 9;
       // Keep url alive while the video plays; revoked in disposeObject
       createMediaObject(tex, aspect, { isVideo: true, videoEl: v, videoUrl: url });
-      showToast('🎬 動画を配置しました / Video placed');
+      showToast('動画を置きました（ループ再生）');
     }, { once: true });
     v.addEventListener('error', () => {
       URL.revokeObjectURL(url);
@@ -625,7 +626,7 @@
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_STROKE_POINTS * 3), 3));
     geo.setDrawRange(0, 0);
     const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
-      color: 0x6ee7ff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+      color: 0xff7a3c, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
     }));
     line.frustumCulled = false;
     scene.add(line);
@@ -692,9 +693,9 @@
    * ============================================================ */
   let mode = 'play';
   const MODE_NAMES = {
-    play: '🖐 操作モード / Play mode',
-    draw: '✏️ 描画モード / Draw mode',
-    laser: '⚡ レーザーモード / Laser mode'
+    play: '「操る」— 選ぶ・掴む・押す',
+    draw: '「描く」— 指先で空中に線を引く',
+    laser: '「射る」— ピースサインで光線を放つ'
   };
 
   function setMode(m) {
@@ -725,7 +726,7 @@
   const FORCE_RADIUS = 1.5;
   const ripples = [];
 
-  function spawnRipple(pos, color = 0x6ee7ff) {
+  function spawnRipple(pos, color = 0xe8622c) {
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.25, 0.34, 48),
       new THREE.MeshBasicMaterial({
@@ -775,7 +776,7 @@
     if (speed > 2.4 && nowSec() - hs.lastRipple > 0.35) {
       hs.lastRipple = nowSec();
       spawnRipple(hs.palmWorld);
-      spawnBurst(hs.palmWorld, 0x6ee7ff, 16, Math.min(speed, 5));
+      spawnBurst(hs.palmWorld, 0xe8622c, 16, Math.min(speed, 5));
     }
   }
 
@@ -928,16 +929,16 @@
   function applyCombo(action, mesh) {
     const ud = mesh.userData;
     if (action === 'duplicate') {
-      duplicateObject(mesh, 0x6ee7ff);
-      showToast('✌️ 複製！ / Duplicated');
+      duplicateObject(mesh, 0xd9a441);
+      showToast('✌️ 複製しました');
     } else if (action === 'grow') {
       ud.baseScale = Math.min(ud.baseScale * 1.5, 3.0);
       spawnBurst(mesh.position, 0x7cff9b, 22, 2.5);
-      showToast('👍 拡大 ×1.5 / Grow');
+      showToast('👍 1.5倍に拡大');
     } else if (action === 'shrink') {
       ud.baseScale = Math.max(ud.baseScale * 0.67, 0.25);
       spawnBurst(mesh.position, 0xffc857, 22, 2.0);
-      showToast('🤙 縮小 ×0.67 / Shrink');
+      showToast('🤙 0.67倍に縮小');
     } else if (action === 'recolor') {
       let color = mesh.material.color.getHex();
       while (color === mesh.material.color.getHex()) {
@@ -946,7 +947,7 @@
       mesh.material.color.setHex(color);
       if (mesh.material.emissive) mesh.material.emissive.setHex(color);
       spawnBurst(mesh.position, color, 26, 2.6);
-      showToast('✊ カラーチェンジ / Recolor');
+      showToast('✊ 色を変えました');
     }
   }
 
@@ -1015,10 +1016,10 @@
 
     hs.lastCircle = t;
     hs.trail.length = 0;
-    const copy = duplicateObject(best, 0xffc857);
-    spawnRipple(best.position, 0xffc857);
+    const copy = duplicateObject(best, 0xd9a441);
+    spawnRipple(best.position, 0xd9a441);
     spawnRipple(copy.position, 0xffffff);
-    showToast('⭕ 輪郭なぞりで複製！ / Circle-clone');
+    showToast('⭕ 囲んで複製しました');
   }
 
   /* ============================================================
@@ -1061,11 +1062,11 @@
   function makeCursor() {
     const cursor = new THREE.Mesh(
       new THREE.SphereGeometry(0.09, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0x6ee7ff, transparent: true, opacity: 0.85 })
+      new THREE.MeshBasicMaterial({ color: 0xf2e8d5, transparent: true, opacity: 0.85 })
     );
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.14, 0.18, 32),
-      new THREE.MeshBasicMaterial({ color: 0x6ee7ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0xf2e8d5, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
     );
     cursor.add(ring);
     cursor.visible = false;
@@ -1132,8 +1133,8 @@
     if (results.multiHandLandmarks) {
       for (const lm of results.multiHandLandmarks) {
         if (typeof drawConnectors !== 'undefined') {
-          drawConnectors(overlayCtx, lm, HAND_CONNECTIONS, { color: 'rgba(110,231,255,.85)', lineWidth: 2 });
-          drawLandmarks(overlayCtx, lm, { color: '#b388ff', lineWidth: 1, radius: 2.5 });
+          drawConnectors(overlayCtx, lm, HAND_CONNECTIONS, { color: 'rgba(242,232,213,.85)', lineWidth: 2 });
+          drawLandmarks(overlayCtx, lm, { color: '#e8622c', lineWidth: 1, radius: 2.5 });
         }
       }
     }
@@ -1273,7 +1274,7 @@
     hs.cursor.visible = true;
     hs.cursor.position.copy(hs.worldPos);
     hs.cursor.lookAt(camera.position);
-    hs.cursor.material.color.setHex(hs.grabbed ? 0xffc857 : (hs.pinching ? 0xff7ad9 : 0x6ee7ff));
+    hs.cursor.material.color.setHex(hs.grabbed ? 0xd9a441 : (hs.pinching ? 0xe8622c : 0xf2e8d5));
 
     if (hs.grabbed) {
       // While holding: no drawing, no laser, no circle detection
@@ -1534,7 +1535,7 @@
   }
 
   document.getElementById('loader-msg').innerHTML =
-    'カメラの使用許可を求められたら「許可」を押してください。<br>Please allow camera access when prompted.<br><span style="color:#5d6880;font-size:12px">Loading MediaPipe hand-tracking model…</span>';
+    'カメラの使用許可を求められたら「許可」を押してください。<br>Please allow camera access when prompted.<br><span style="color:#9b8f7a;font-size:12px">Loading MediaPipe hand-tracking model…</span>';
 
   startCamera();
 })();
