@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HandForge — Gesture 3D Playground</title>
+<style>
+  :root {
+    --accent: #6ee7ff;
+    --accent2: #b388ff;
+    --glass-bg: rgba(15, 20, 35, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; font-family: 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif; color: #e8ecf4; }
+
+  #scene-canvas { position: fixed; inset: 0; display: block; }
+
+  /* Camera preview (mirrored, small) */
+  #cam-wrap {
+    position: fixed; right: 16px; bottom: 16px; width: 200px; height: 150px;
+    border-radius: 14px; overflow: hidden; z-index: 20;
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    background: #000;
+  }
+  #cam-video, #cam-overlay {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; transform: scaleX(-1);
+  }
+
+  /* Header */
+  header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 22px;
+    background: linear-gradient(180deg, rgba(8,12,22,.85), rgba(8,12,22,.35) 80%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .logo {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center; font-size: 18px;
+    box-shadow: 0 0 18px rgba(110,231,255,.45);
+  }
+  .brand h1 {
+    font-size: 20px; font-weight: 700; letter-spacing: .06em;
+    background: linear-gradient(90deg, #fff, var(--accent));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .brand small { display: block; font-size: 10px; color: #7f8ba3; letter-spacing: .2em; text-transform: uppercase; }
+  .controls { display: flex; gap: 10px; }
+  .btn {
+    padding: 9px 18px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;
+    color: #e8ecf4; background: var(--glass-bg); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: all .2s ease;
+  }
+  .btn:hover { border-color: var(--accent); box-shadow: 0 0 16px rgba(110,231,255,.35); transform: translateY(-1px); }
+  .btn.primary {
+    background: linear-gradient(135deg, rgba(110,231,255,.25), rgba(179,136,255,.25));
+    border-color: rgba(110,231,255,.5);
+  }
+
+  /* FPS */
+  #fps {
+    position: fixed; top: 70px; right: 16px; z-index: 30;
+    padding: 6px 14px; border-radius: 10px; font-size: 12px; font-variant-numeric: tabular-nums;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px); color: var(--accent);
+  }
+
+  /* Help overlay */
+  #help {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 25; max-width: 720px; width: calc(100% - 260px);
+    padding: 12px 20px; border-radius: 16px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+  .hint { text-align: center; font-size: 11.5px; line-height: 1.5; color: #aeb8cc; }
+  .hint b { display: block; font-size: 13px; color: #fff; }
+  .hint span.en { color: #7f8ba3; font-size: 10.5px; }
+  .hint .ico { font-size: 20px; display: block; margin-bottom: 2px; }
+
+  /* Loading / error screens */
+  #loader, #error-screen {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: radial-gradient(ellipse at 50% 40%, #0c1424 0%, #05070d 70%);
+    text-align: center; padding: 24px; transition: opacity .6s ease;
+  }
+  #error-screen { display: none; }
+  .spinner {
+    width: 54px; height: 54px; border-radius: 50%;
+    border: 3px solid rgba(110,231,255,.15); border-top-color: var(--accent);
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader h2, #error-screen h2 { font-size: 22px; font-weight: 700; letter-spacing: .04em; }
+  #loader p, #error-screen p { color: #8b96ad; font-size: 13.5px; line-height: 1.7; max-width: 460px; }
+  .fade-out { opacity: 0; pointer-events: none; }
+
+  #status-badge {
+    position: fixed; top: 70px; left: 16px; z-index: 30;
+    padding: 6px 14px; border-radius: 10px; font-size: 12px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px); color: #8b96ad;
+  }
+  #status-badge.active { color: #7CFF9B; border-color: rgba(124,255,155,.4); }
+</style>
+</head>
+<body>
+
+<canvas id="scene-canvas"></canvas>
+
+<header>
+  <div class="brand">
+    <div class="logo">✋</div>
+    <div>
+      <h1>HandForge</h1>
+      <small>Gesture-Driven 3D</small>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="btn-add">＋ Add Object</button>
+    <button class="btn" id="btn-reset">⟳ Reset</button>
+  </div>
+</header>
+
+<div id="fps">-- FPS</div>
+<div id="status-badge">🖐 手を検出中… / Detecting hands…</div>
+
+<div id="cam-wrap">
+  <video id="cam-video" autoplay playsinline muted></video>
+  <canvas id="cam-overlay"></canvas>
+</div>
+
+<div id="help">
+  <div class="hint"><span class="ico">👉</span><b>指差しで選択</b>Point to select<br><span class="en">人差し指を伸ばして狙う</span></div>
+  <div class="hint"><span class="ico">🤏</span><b>ピンチで掴む</b>Pinch to grab<br><span class="en">親指＋人差し指をくっつける</span></div>
+  <div class="hint"><span class="ico">✊➜✋</span><b>動かして操作</b>Move &amp; rotate<br><span class="en">掴んだまま手を動かす</span></div>
+  <div class="hint"><span class="ico">🖐</span><b>開いてリリース</b>Open to release<br><span class="en">慣性で飛んでいく</span></div>
+  <div class="hint"><span class="ico">🙌</span><b>両手対応</b>Both hands<br><span class="en">2つ同時に操作OK</span></div>
+</div>
+
+<div id="loader">
+  <div class="spinner"></div>
+  <h2>HandForge を起動中…</h2>
+  <p id="loader-msg">MediaPipe Hands と Three.js を読み込んでいます。<br>カメラの使用許可を求められたら「許可」を押してください。<br>Loading hand-tracking engine… Please allow camera access.</p>
+</div>
+
+<div id="error-screen">
+  <div style="font-size:48px">📷🚫</div>
+  <h2 id="error-title">カメラを利用できません</h2>
+  <p id="error-msg"></p>
+  <button class="btn primary" onclick="location.reload()">再試行 / Retry</button>
+</div>
+
+<!-- CDN: Three.js (global build) + MediaPipe Hands -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.152.2/three.min.js" integrity="sha384-aUS0jUAjhhBFNPifgxTHTNcsZDqkbegLd/JKEhJzK3Lyg9nFF1PZ2J++mzKwd8Kz" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js" integrity="sha384-LMmYFt2cwutTiLP0MQD7uzxpTmgSiyd3wQJIkAoIeVyPawaUX2LiPBsHxtZhUHYM" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js" integrity="sha384-7qyH9w0zhCEY+/anz/+F1xWzVXv2tkO5sskVIsZkF8UAiLUcpbd8P9RapHokMrQ1" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.min.js" integrity="sha384-LxKrt5G37Xo44EgLU97u/8nZRWUMezHAqmhv2E8iQBrDED+/551MCyPzrgkzCVmT" crossorigin="anonymous"></script>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ============================================================
+   *  Error handling helpers
+   * ============================================================ */
+  const loaderEl = document.getElementById('loader');
+  const errEl = document.getElementById('error-screen');
+
+  function showError(title, msg) {
+    loaderEl.classList.add('fade-out');
+    errEl.style.display = 'flex';
+    document.getElementById('error-title').textContent = title;
+    document.getElementById('error-msg').innerHTML = msg;
+  }
+
+  if (typeof THREE === 'undefined') {
+    showError('ライブラリの読み込みに失敗しました',
+      'Three.js を CDN から読み込めませんでした。ネット接続を確認して再試行してください。<br>Failed to load Three.js from CDN. Check your internet connection.');
+    return;
+  }
+  if (typeof Hands === 'undefined') {
+    showError('ライブラリの読み込みに失敗しました',
+      'MediaPipe Hands を CDN から読み込めませんでした。ネット接続を確認して再試行してください。<br>Failed to load MediaPipe Hands from CDN.');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showError('カメラ非対応のブラウザです',
+      'このブラウザはカメラ入力 (getUserMedia) に対応していません。Chrome / Edge / Safari の最新版をご利用ください。<br>This browser does not support camera input.');
+    return;
+  }
+
+  /* ============================================================
+   *  Three.js scene setup
+   * ============================================================ */
+  const canvas = document.getElementById('scene-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05070d);
+  scene.fog = new THREE.Fog(0x05070d, 14, 34);
+
+  const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 1.6, 8);
+  camera.lookAt(0, 0.8, 0);
+
+  // Lighting: ambient + hemisphere + multiple directionals
+  scene.add(new THREE.AmbientLight(0x334466, 0.5));
+  scene.add(new THREE.HemisphereLight(0x88aaff, 0x141824, 0.55));
+
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  keyLight.position.set(5, 9, 6);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.camera.left = -12; keyLight.shadow.camera.right = 12;
+  keyLight.shadow.camera.top = 12; keyLight.shadow.camera.bottom = -12;
+  scene.add(keyLight);
+
+  const rimLight = new THREE.DirectionalLight(0x6ee7ff, 0.6);
+  rimLight.position.set(-6, 4, -4);
+  scene.add(rimLight);
+
+  const fillLight = new THREE.DirectionalLight(0xb388ff, 0.35);
+  fillLight.position.set(0, -3, 5);
+  scene.add(fillLight);
+
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshStandardMaterial({ color: 0x0b1020, roughness: 0.85, metalness: 0.2 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -2.2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Subtle grid
+  const grid = new THREE.GridHelper(60, 60, 0x1c2a4a, 0x101828);
+  grid.position.y = -2.19;
+  scene.add(grid);
+
+  /* ============================================================
+   *  Interactive objects
+   * ============================================================ */
+  const PALETTE = [0xff5e7e, 0x6ee7ff, 0xffc857, 0x7cff9b, 0xb388ff, 0xff9d5c, 0x5cd6ff, 0xff7ad9];
+  const objects = [];  // meshes user can grab
+
+  function randomGeometry() {
+    const r = Math.random();
+    if (r < 0.2) return new THREE.BoxGeometry(1, 1, 1);
+    if (r < 0.4) return new THREE.SphereGeometry(0.6, 32, 24);
+    if (r < 0.6) return new THREE.TorusGeometry(0.5, 0.22, 20, 48);
+    if (r < 0.75) return new THREE.ConeGeometry(0.6, 1.1, 32);
+    if (r < 0.9) return new THREE.IcosahedronGeometry(0.65, 0);
+    return new THREE.TorusKnotGeometry(0.42, 0.16, 96, 16);
+  }
+
+  function randomMaterial(color) {
+    if (Math.random() < 0.5) {
+      return new THREE.MeshStandardMaterial({
+        color, roughness: 0.25 + Math.random() * 0.5, metalness: Math.random() * 0.8,
+        emissive: color, emissiveIntensity: 0.06
+      });
+    }
+    return new THREE.MeshPhongMaterial({
+      color, shininess: 40 + Math.random() * 80, specular: 0x99aacc,
+      emissive: color, emissiveIntensity: 0.05
+    });
+  }
+
+  function createObject(pos) {
+    const color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+    const mesh = new THREE.Mesh(randomGeometry(), randomMaterial(color));
+    mesh.position.copy(pos);
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = {
+      baseEmissive: mesh.material.emissiveIntensity,
+      baseScale: 0.8 + Math.random() * 0.5,
+      velocity: new THREE.Vector3(),
+      angularVelocity: new THREE.Vector3(),
+      grabbedBy: null,
+      hovered: false
+    };
+    mesh.scale.setScalar(mesh.userData.baseScale);
+    scene.add(mesh);
+    objects.push(mesh);
+    return mesh;
+  }
+
+  function spawnInitialObjects() {
+    const count = 7;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const radius = 2.4 + Math.random() * 1.2;
+      createObject(new THREE.Vector3(
+        Math.cos(angle) * radius,
+        0.4 + Math.random() * 2.0,
+        Math.sin(angle) * radius * 0.5
+      ));
+    }
+  }
+
+  function resetScene() {
+    for (const o of objects) {
+      scene.remove(o);
+      o.geometry.dispose();
+      o.material.dispose();
+    }
+    objects.length = 0;
+    clearParticles();
+    spawnInitialObjects();
+  }
+
+  document.getElementById('btn-reset').addEventListener('click', resetScene);
+  document.getElementById('btn-add').addEventListener('click', () => {
+    createObject(new THREE.Vector3((Math.random() - 0.5) * 5, 1 + Math.random() * 2, (Math.random() - 0.5) * 3));
+  });
+
+  spawnInitialObjects();
+
+  /* ============================================================
+   *  Particle system (grab / release bursts)
+   * ============================================================ */
+  const particles = [];
+
+  function spawnBurst(position, color, count = 24, speed = 2.5) {
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const velocities = [];
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z;
+      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      velocities.push(dir.multiplyScalar(speed * (0.4 + Math.random() * 0.6)));
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color, size: 0.07, transparent: true, opacity: 1,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const points = new THREE.Points(geo, mat);
+    points.userData = { velocities, life: 1 };
+    scene.add(points);
+    particles.push(points);
+  }
+
+  function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.userData.life -= dt * 1.6;
+      if (p.userData.life <= 0) {
+        scene.remove(p);
+        p.geometry.dispose();
+        p.material.dispose();
+        particles.splice(i, 1);
+        continue;
+      }
+      const pos = p.geometry.attributes.position;
+      const vels = p.userData.velocities;
+      for (let j = 0; j < vels.length; j++) {
+        vels[j].y -= 2.5 * dt; // gravity on particles
+        pos.array[j * 3] += vels[j].x * dt;
+        pos.array[j * 3 + 1] += vels[j].y * dt;
+        pos.array[j * 3 + 2] += vels[j].z * dt;
+      }
+      pos.needsUpdate = true;
+      p.material.opacity = p.userData.life;
+    }
+  }
+
+  function clearParticles() {
+    for (const p of particles) {
+      scene.remove(p);
+      p.geometry.dispose();
+      p.material.dispose();
+    }
+    particles.length = 0;
+  }
+
+  /* ============================================================
+   *  Hand tracking state (supports 2 hands)
+   * ============================================================ */
+  // Per-hand state, keyed by handedness label ('Left' / 'Right')
+  const handStates = {};
+
+  function getHandState(label) {
+    if (!handStates[label]) {
+      handStates[label] = {
+        visible: false,
+        pointer: new THREE.Vector2(),       // NDC coords for raycasting
+        worldPos: new THREE.Vector3(),      // pinch midpoint mapped to world
+        prevWorldPos: new THREE.Vector3(),
+        worldVelocity: new THREE.Vector3(),
+        pinching: false,
+        wasPinching: false,
+        openPalm: false,
+        grabbed: null,
+        grabOffset: new THREE.Vector3(),
+        hovered: null,
+        cursor: makeCursor(),
+        smoothedLm: null
+      };
+    }
+    return handStates[label];
+  }
+
+  function makeCursor() {
+    const cursor = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0x6ee7ff, transparent: true, opacity: 0.85 })
+    );
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.14, 0.18, 32),
+      new THREE.MeshBasicMaterial({ color: 0x6ee7ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+    );
+    cursor.add(ring);
+    cursor.visible = false;
+    scene.add(cursor);
+    return cursor;
+  }
+
+  const raycaster = new THREE.Raycaster();
+
+  // Distance between two landmarks (normalized coords)
+  function lmDist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+  }
+
+  // Is a finger extended? Compare tip distance from wrist vs pip distance.
+  function fingerExtended(lm, tipIdx, pipIdx) {
+    return lmDist(lm[tipIdx], lm[0]) > lmDist(lm[pipIdx], lm[0]) * 1.15;
+  }
+
+  function analyzeHand(lm) {
+    const pinchDist = lmDist(lm[4], lm[8]);
+    // Reference scale: wrist to index MCP, makes thresholds distance-invariant
+    const scaleRef = lmDist(lm[0], lm[9]) || 0.1;
+    const pinching = (pinchDist / scaleRef) < 0.42;
+
+    const idxExt = fingerExtended(lm, 8, 6);
+    const midExt = fingerExtended(lm, 12, 10);
+    const ringExt = fingerExtended(lm, 16, 14);
+    const pinkyExt = fingerExtended(lm, 20, 18);
+    const extCount = [idxExt, midExt, ringExt, pinkyExt].filter(Boolean).length;
+
+    return {
+      pinching,
+      pointing: idxExt && !midExt && !ringExt,
+      openPalm: extCount >= 4 && !pinching
+    };
+  }
+
+  // Map normalized MediaPipe coords -> world position on a plane in front of camera
+  const INTERACT_DEPTH = 5.2; // distance from camera of the interaction plane
+  function lmToWorld(nx, ny, out) {
+    // Mirror x (front camera is mirrored to the user)
+    const ndcX = (1 - nx) * 2 - 1;
+    const ndcY = -(ny * 2 - 1);
+    out.set(ndcX, ndcY, 0.5).unproject(camera);
+    out.sub(camera.position).normalize();
+    out.multiplyScalar(INTERACT_DEPTH).add(camera.position);
+    return out;
+  }
+
+  const statusBadge = document.getElementById('status-badge');
+
+  function onResults(results) {
+    // Draw landmarks on preview canvas
+    overlayCtx.save();
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    if (results.multiHandLandmarks) {
+      for (const lm of results.multiHandLandmarks) {
+        if (typeof drawConnectors !== 'undefined') {
+          drawConnectors(overlayCtx, lm, HAND_CONNECTIONS, { color: 'rgba(110,231,255,.85)', lineWidth: 2 });
+          drawLandmarks(overlayCtx, lm, { color: '#b388ff', lineWidth: 1, radius: 2.5 });
+        }
+      }
+    }
+    overlayCtx.restore();
+
+    const seen = new Set();
+    const nHands = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+
+    for (let i = 0; i < nHands; i++) {
+      const lmRaw = results.multiHandLandmarks[i];
+      const label = results.multiHandedness && results.multiHandedness[i]
+        ? results.multiHandedness[i].label : ('hand' + i);
+      seen.add(label);
+      const hs = getHandState(label);
+      hs.visible = true;
+
+      // Exponential smoothing of landmarks to reduce jitter
+      if (!hs.smoothedLm) {
+        hs.smoothedLm = lmRaw.map(p => ({ x: p.x, y: p.y, z: p.z }));
+      } else {
+        const a = 0.45;
+        for (let j = 0; j < lmRaw.length; j++) {
+          hs.smoothedLm[j].x += (lmRaw[j].x - hs.smoothedLm[j].x) * a;
+          hs.smoothedLm[j].y += (lmRaw[j].y - hs.smoothedLm[j].y) * a;
+          hs.smoothedLm[j].z += (lmRaw[j].z - hs.smoothedLm[j].z) * a;
+        }
+      }
+      const lm = hs.smoothedLm;
+      const g = analyzeHand(lm);
+
+      // Pointer = index fingertip; grab anchor = pinch midpoint
+      const pinchMidX = (lm[4].x + lm[8].x) / 2;
+      const pinchMidY = (lm[4].y + lm[8].y) / 2;
+      hs.pointer.set((1 - lm[8].x) * 2 - 1, -(lm[8].y * 2 - 1));
+
+      hs.prevWorldPos.copy(hs.worldPos);
+      lmToWorld(pinchMidX, pinchMidY, hs.worldPos);
+
+      hs.wasPinching = hs.pinching;
+      hs.pinching = g.pinching;
+      hs.openPalm = g.openPalm;
+
+      handleInteraction(hs, g);
+    }
+
+    // Hands that disappeared this frame
+    for (const label in handStates) {
+      if (!seen.has(label)) {
+        const hs = handStates[label];
+        if (hs.visible && hs.grabbed) releaseObject(hs);
+        hs.visible = false;
+        hs.pinching = false;
+        hs.smoothedLm = null;
+        hs.cursor.visible = false;
+        setHover(hs, null);
+      }
+    }
+
+    if (nHands > 0) {
+      statusBadge.classList.add('active');
+      statusBadge.textContent = nHands === 2 ? '🙌 両手検出中 / Two hands' : '🖐 手を検出 / Hand tracked';
+    } else {
+      statusBadge.classList.remove('active');
+      statusBadge.textContent = '🖐 手を検出中… / Detecting hands…';
+    }
+  }
+
+  /* ============================================================
+   *  Interaction: point / pinch-grab / move / release
+   * ============================================================ */
+  function setHover(hs, mesh) {
+    if (hs.hovered === mesh) return;
+    if (hs.hovered && hs.hovered.userData) {
+      // Only un-highlight if no other hand hovers it and it's not grabbed
+      const stillHovered = Object.values(handStates).some(o => o !== hs && o.hovered === hs.hovered);
+      if (!stillHovered && !hs.hovered.userData.grabbedBy) {
+        hs.hovered.userData.hovered = false;
+      }
+    }
+    hs.hovered = mesh;
+    if (mesh) mesh.userData.hovered = true;
+  }
+
+  function grabObject(hs, mesh) {
+    if (mesh.userData.grabbedBy) return; // already held by the other hand
+    mesh.userData.grabbedBy = hs;
+    hs.grabbed = mesh;
+    hs.grabOffset.copy(mesh.position).sub(hs.worldPos);
+    mesh.userData.velocity.set(0, 0, 0);
+    spawnBurst(mesh.position, mesh.material.color.getHex(), 26, 2.2);
+  }
+
+  function releaseObject(hs) {
+    const mesh = hs.grabbed;
+    if (!mesh) return;
+    mesh.userData.grabbedBy = null;
+    // Throw with hand velocity (inertia)
+    mesh.userData.velocity.copy(hs.worldVelocity).multiplyScalar(0.9);
+    mesh.userData.angularVelocity.set(
+      (Math.random() - 0.5) * 3 + hs.worldVelocity.y * 0.5,
+      (Math.random() - 0.5) * 3 + hs.worldVelocity.x * 0.5,
+      (Math.random() - 0.5) * 2
+    );
+    spawnBurst(mesh.position, 0xffffff, 32, 3.2);
+    hs.grabbed = null;
+  }
+
+  function handleInteraction(hs, gestures) {
+    // Cursor follows hand
+    hs.cursor.visible = true;
+    hs.cursor.position.copy(hs.worldPos);
+    hs.cursor.lookAt(camera.position);
+    hs.cursor.material.color.setHex(hs.grabbed ? 0xffc857 : (hs.pinching ? 0xff7ad9 : 0x6ee7ff));
+
+    if (hs.grabbed) {
+      // Move grabbed object with hand; add gentle rotation from motion
+      const target = hs.worldPos.clone().add(hs.grabOffset);
+      hs.grabbed.position.lerp(target, 0.55);
+      const delta = hs.worldPos.clone().sub(hs.prevWorldPos);
+      hs.grabbed.rotation.y += delta.x * 1.6;
+      hs.grabbed.rotation.x += delta.y * 1.6;
+
+      // Release on open palm OR pinch ended
+      if (gestures.openPalm || !hs.pinching) {
+        releaseObject(hs);
+      }
+      return;
+    }
+
+    // Raycast from index-finger pointer for selection highlight
+    if (gestures.pointing || hs.pinching) {
+      raycaster.setFromCamera(hs.pointer, camera);
+      const hits = raycaster.intersectObjects(objects, false);
+      setHover(hs, hits.length ? hits[0].object : null);
+    } else {
+      setHover(hs, null);
+    }
+
+    // Pinch start -> grab (either the hovered object or the nearest one to the hand)
+    if (hs.pinching && !hs.wasPinching) {
+      let target = hs.hovered;
+      if (!target) {
+        // Fallback: nearest object within grab radius of the hand in world space
+        let best = null, bestDist = 1.4;
+        for (const o of objects) {
+          if (o.userData.grabbedBy) continue;
+          const d = o.position.distanceTo(hs.worldPos);
+          if (d < bestDist) { best = o; bestDist = d; }
+        }
+        target = best;
+      }
+      if (target) grabObject(hs, target);
+    }
+  }
+
+  /* ============================================================
+   *  Physics + highlight animation
+   * ============================================================ */
+  const BOUNDS = { x: 9, yTop: 8, yFloor: -2.2, z: 6 };
+
+  function updateObjects(dt, time) {
+    for (const o of objects) {
+      const ud = o.userData;
+
+      if (!ud.grabbedBy) {
+        // Inertia + light gravity + damping
+        ud.velocity.y -= 3.2 * dt;
+        ud.velocity.multiplyScalar(1 - 0.6 * dt);
+        o.position.addScaledVector(ud.velocity, dt);
+
+        o.rotation.x += ud.angularVelocity.x * dt;
+        o.rotation.y += ud.angularVelocity.y * dt;
+        o.rotation.z += ud.angularVelocity.z * dt;
+        ud.angularVelocity.multiplyScalar(1 - 0.8 * dt);
+
+        // Idle float when almost at rest
+        if (ud.velocity.lengthSq() < 0.01) {
+          o.position.y += Math.sin(time * 1.2 + o.id) * 0.0018;
+          o.rotation.y += 0.15 * dt;
+        }
+
+        // Bounce off floor and soft walls
+        const half = ud.baseScale * 0.6;
+        if (o.position.y - half < BOUNDS.yFloor) {
+          o.position.y = BOUNDS.yFloor + half;
+          if (ud.velocity.y < 0) ud.velocity.y *= -0.45;
+        }
+        if (Math.abs(o.position.x) > BOUNDS.x) { o.position.x = Math.sign(o.position.x) * BOUNDS.x; ud.velocity.x *= -0.5; }
+        if (Math.abs(o.position.z) > BOUNDS.z) { o.position.z = Math.sign(o.position.z) * BOUNDS.z; ud.velocity.z *= -0.5; }
+        if (o.position.y > BOUNDS.yTop) { o.position.y = BOUNDS.yTop; ud.velocity.y *= -0.4; }
+      }
+
+      // Visual feedback: emissive glow + scale pulse
+      const isGrabbed = !!ud.grabbedBy;
+      const targetEmissive = isGrabbed ? 0.55 : (ud.hovered ? 0.3 : ud.baseEmissive);
+      o.material.emissiveIntensity += (targetEmissive - o.material.emissiveIntensity) * Math.min(1, dt * 10);
+
+      const targetScale = ud.baseScale * (isGrabbed ? 1.14 : (ud.hovered ? 1.06 : 1));
+      const s = o.scale.x + (targetScale - o.scale.x) * Math.min(1, dt * 10);
+      o.scale.setScalar(s);
+    }
+  }
+
+  /* ============================================================
+   *  Hand velocity tracking (for throw inertia)
+   * ============================================================ */
+  function updateHandVelocities(dt) {
+    for (const label in handStates) {
+      const hs = handStates[label];
+      if (!hs.visible || dt <= 0) continue;
+      const instV = hs.worldPos.clone().sub(hs.prevWorldPos).divideScalar(Math.max(dt, 1 / 120));
+      // Smooth velocity
+      hs.worldVelocity.lerp(instV, 0.35);
+      hs.worldVelocity.clampLength(0, 14);
+    }
+  }
+
+  /* ============================================================
+   *  Render loop + FPS counter
+   * ============================================================ */
+  const fpsEl = document.getElementById('fps');
+  let lastTime = performance.now();
+  let fpsAccum = 0, fpsFrames = 0, fpsTimer = 0;
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+    const time = now / 1000;
+
+    updateHandVelocities(dt);
+    updateObjects(dt, time);
+    updateParticles(dt);
+
+    // FPS (update label ~2x/sec)
+    fpsAccum += dt; fpsFrames++; fpsTimer += dt;
+    if (fpsTimer >= 0.5) {
+      fpsEl.textContent = Math.round(fpsFrames / fpsAccum) + ' FPS';
+      fpsAccum = 0; fpsFrames = 0; fpsTimer = 0;
+    }
+
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(animate);
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  /* ============================================================
+   *  MediaPipe Hands + camera bootstrap
+   * ============================================================ */
+  const videoEl = document.getElementById('cam-video');
+  const overlayCanvas = document.getElementById('cam-overlay');
+  const overlayCtx = overlayCanvas.getContext('2d');
+  overlayCanvas.width = 640;
+  overlayCanvas.height = 480;
+
+  const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+  });
+  hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.5
+  });
+  hands.onResults(onResults);
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: 'user' }
+      });
+      videoEl.srcObject = stream;
+      await videoEl.play();
+
+      // Feed frames to MediaPipe using our own rAF-independent loop
+      const mpCamera = new Camera(videoEl, {
+        onFrame: async () => { await hands.send({ image: videoEl }); },
+        width: 640,
+        height: 480
+      });
+      mpCamera.start();
+
+      // Hide loader once first results arrive (or after a grace period)
+      let loaded = false;
+      const origOnResults = onResults;
+      hands.onResults((res) => {
+        if (!loaded) {
+          loaded = true;
+          loaderEl.classList.add('fade-out');
+          setTimeout(() => { loaderEl.style.display = 'none'; }, 700);
+        }
+        origOnResults(res);
+      });
+      // Safety: hide loader after 12s even without detection results
+      setTimeout(() => {
+        if (!loaded) {
+          loaderEl.classList.add('fade-out');
+          setTimeout(() => { loaderEl.style.display = 'none'; }, 700);
+        }
+      }, 12000);
+
+    } catch (err) {
+      console.error(err);
+      if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+        showError('カメラの使用が拒否されました',
+          'HandForge は手の動きをトラッキングするためにカメラが必要です。<br>ブラウザのアドレスバーのカメラアイコンから許可して、再試行してください。<br><br>Camera access was denied. Please allow camera access in your browser settings and retry.');
+      } else if (err && err.name === 'NotFoundError') {
+        showError('カメラが見つかりません',
+          'カメラデバイスが検出できませんでした。カメラを接続して再試行してください。<br>No camera device was found.');
+      } else {
+        showError('カメラの起動に失敗しました',
+          `エラー: ${err && err.message ? err.message : err}<br>ページを再読み込みして再試行してください。`);
+      }
+    }
+  }
+
+  document.getElementById('loader-msg').innerHTML =
+    'カメラの使用許可を求められたら「許可」を押してください。<br>Please allow camera access when prompted.<br><span style="color:#5d6880;font-size:12px">Loading MediaPipe hand-tracking model…</span>';
+
+  startCamera();
+})();
+</script>
+</body>
+</html>
