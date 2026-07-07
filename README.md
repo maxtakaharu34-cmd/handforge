@@ -8,7 +8,7 @@ Gesture-driven 3D playground — control 3D objects with your bare hands, right 
 
 ## How to use / 使い方
 
-The app has three modes (switcher at the top center): **Play / Draw / Laser**.
+The app has four modes (switcher at the top center): **Play / Draw / Laser / Sculpt**. Your hands are rendered inside the scene as a 3D skeleton (21 joints, with depth).
 
 ### 🖐 Play mode
 | Gesture | Action |
@@ -30,6 +30,9 @@ Point with the index finger to draw glowing lines in 3D. Lines fade after 30 s; 
 ### ⚡ Laser mode
 Make a peace sign ✌️ to fire a glowing laser that knocks objects away. Hold the beam on the same target for about a second to shatter it.
 
+### 🔨 Sculpt mode（打つ）
+A glowing hot ingot sits at the center. Press it with a fingertip to dent it; pinch near it to pull material out. Hit **焼き入れ (Quench)** to cool it into steel — the finished piece becomes a normal grabbable object and a fresh ingot appears.
+
 ### 🖼🎬 Media
 Upload images or videos (button or drag & drop) — they appear as grabbable framed planes; videos loop as live textures.
 
@@ -45,7 +48,9 @@ Just open `index.html` in a browser (Chrome / Edge / Safari). Allow camera acces
 
 ## Features
 
-- Mode-based UI (Play / Draw / Laser) with per-mode help hints
+- Mode-based UI (Play / Draw / Laser / Sculpt) with per-mode help hints
+- Real-time mesh sculpting: dent, pull, and quench a hot metal ingot
+- 3D hand skeleton rendered inside the scene with relative depth
 - Screenshot capture, zero-gravity toggle, and WebAudio sound effects (mutable)
 - Glassmorphism dark UI with FPS counter, live gesture badge, camera preview
 - Image & video upload as grabbable textured planes with glowing frames

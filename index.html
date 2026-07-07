@@ -189,6 +189,7 @@
     <button class="btn primary" id="btn-upload" title="Upload image / video">画像・動画を置く</button>
     <button class="btn" id="btn-add" title="Add object">かたちを足す</button>
     <button class="btn" id="btn-clear-lines" title="Clear lines">線を消す</button>
+    <button class="btn" id="btn-quench" title="Quench the ingot" style="display:none">焼き入れ</button>
     <button class="btn" id="btn-shot" title="Save a screenshot">写す</button>
     <button class="btn" id="btn-gravity" title="Toggle gravity">浮かす</button>
     <button class="btn" id="btn-sound" title="Toggle sound">音あり</button>
@@ -201,6 +202,7 @@
   <button class="mode-btn active" data-mode="play">操る</button>
   <button class="mode-btn" data-mode="draw">描く</button>
   <button class="mode-btn" data-mode="laser">射る</button>
+  <button class="mode-btn" data-mode="sculpt">打つ</button>
 </nav>
 
 <div id="fps">-- FPS</div>
@@ -229,6 +231,11 @@
     <div class="hint"><span class="ico">✌️</span><b>ピースで発射</b>Peace to fire<br><span class="en">人差し指＋中指を伸ばす</span></div>
     <div class="hint"><span class="ico">🎯</span><b>当てて弾く</b>Knock objects<br><span class="en">ビームが当たると弾き飛ぶ</span></div>
     <div class="hint"><span class="ico">💥</span><b>射抜いて砕く</b>Hold to shatter<br><span class="en">同じ的に約1秒当て続ける</span></div>
+  </div>
+  <div class="help-group" data-mode="sculpt">
+    <div class="hint"><span class="ico">☝️</span><b>押して凹ます</b>Press to dent<br><span class="en">指先で熱い金属に触れる</span></div>
+    <div class="hint"><span class="ico">🤏</span><b>摘んで引き出す</b>Pinch to pull<br><span class="en">材料をつまんで伸ばす</span></div>
+    <div class="hint"><span class="ico">🔥</span><b>焼き入れで完成</b>Quench to finish<br><span class="en">右上のボタンで鋼になり、掴めるようになる</span></div>
   </div>
 </div>
 
@@ -700,7 +707,8 @@
   const MODE_NAMES = {
     play: '「操る」— 選ぶ・掴む・押す',
     draw: '「描く」— 指先で空中に線を引く',
-    laser: '「射る」— ピースサインで光線を放つ'
+    laser: '「射る」— ピースサインで光線を放つ',
+    sculpt: '「打つ」— 熱い金属を手で鍛える'
   };
 
   function setMode(m) {
@@ -709,6 +717,8 @@
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
     document.querySelectorAll('.help-group').forEach(g => g.classList.toggle('active', g.dataset.mode === m));
     document.getElementById('btn-clear-lines').style.display = m === 'draw' ? '' : 'none';
+    document.getElementById('btn-quench').style.display = m === 'sculpt' ? '' : 'none';
+    if (m === 'sculpt' && !ingot) createIngot();
     // Reset transient per-hand state so nothing carries across modes
     for (const label in handStates) {
       const hs = handStates[label];
@@ -941,7 +951,29 @@
     clone: () => { playTone(520, 0.1, 'triangle', 0.1); setTimeout(() => playTone(780, 0.18, 'triangle', 0.1), 80); },
     laserHit: () => playTone(1200, 0.06, 'square', 0.04, -400),
     shatter: () => playTone(160, 0.35, 'sawtooth', 0.14, -100),
-    pop: () => playTone(440, 0.08, 'sine', 0.08, 60)
+    pop: () => playTone(440, 0.08, 'sine', 0.08, 60),
+    clink: () => playTone(1200 + Math.random() * 500, 0.06, 'triangle', 0.05, -700),
+    hiss: () => {
+      // Quench steam: filtered white noise with a fading envelope
+      if (muted) return;
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const dur = 0.6;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 1800;
+      const g = audioCtx.createGain();
+      g.gain.value = 0.09;
+      src.connect(filter).connect(g).connect(audioCtx.destination);
+      src.start();
+    }
   };
 
   document.getElementById('btn-sound').addEventListener('click', (e) => {
@@ -982,6 +1014,102 @@
     sfx.pop();
     showToast(gravityOn ? '重力が戻りました' : '無重力になりました');
   });
+
+  /* ============================================================
+   *  Sculpt mode ("打つ"): forge a glowing ingot with your hands.
+   *  Fingertip dents the surface; pinching pulls material out.
+   *  Quenching turns it into steel and makes it a normal object.
+   * ============================================================ */
+  let ingot = null;
+  const SCULPT_RADIUS = 0.5;
+  const INGOT_MIN_R = 0.25;
+  const INGOT_MAX_R = 2.3;
+
+  function createIngot() {
+    const geo = new THREE.IcosahedronGeometry(1.05, 4);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x3a2412, roughness: 0.55, metalness: 0.65,
+      emissive: 0xff6a1a, emissiveIntensity: 0.5, flatShading: true
+    });
+    ingot = new THREE.Mesh(geo, mat);
+    ingot.position.set(0, 1.1, 2.6);
+    ingot.castShadow = true;
+    ingot.userData = { heat: 0, lastClink: 0 };
+    scene.add(ingot);
+  }
+
+  const _sv = new THREE.Vector3();
+  const _sn = new THREE.Vector3();
+  function sculptWith(hs) {
+    if (!ingot) return;
+    const posAttr = ingot.geometry.attributes.position;
+    const nrmAttr = ingot.geometry.attributes.normal;
+    const tip = ingot.worldToLocal(hs.indexTipWorld.clone());
+    const pinchP = ingot.worldToLocal(hs.worldPos.clone());
+    let changed = false;
+    for (let i = 0; i < posAttr.count; i++) {
+      _sv.fromBufferAttribute(posAttr, i);
+      if (hs.pinching) {
+        // Pull material toward the pinch point
+        const d = _sv.distanceTo(pinchP);
+        if (d < SCULPT_RADIUS * 1.3) {
+          const f = 1 - d / (SCULPT_RADIUS * 1.3);
+          _sv.lerp(pinchP, 0.06 * f);
+          if (_sv.length() > INGOT_MAX_R) _sv.setLength(INGOT_MAX_R);
+          posAttr.setXYZ(i, _sv.x, _sv.y, _sv.z);
+          changed = true;
+        }
+      } else {
+        // Dent the surface along the vertex normal
+        const d = _sv.distanceTo(tip);
+        if (d < SCULPT_RADIUS) {
+          const f = 1 - d / SCULPT_RADIUS;
+          _sn.fromBufferAttribute(nrmAttr, i);
+          _sv.addScaledVector(_sn, -0.035 * f);
+          if (_sv.length() < INGOT_MIN_R) _sv.setLength(INGOT_MIN_R);
+          posAttr.setXYZ(i, _sv.x, _sv.y, _sv.z);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      posAttr.needsUpdate = true;
+      ingot.geometry.computeVertexNormals();
+      ingot.userData.heat = 1;
+      if (nowSec() - ingot.userData.lastClink > 0.18) {
+        ingot.userData.lastClink = nowSec();
+        sfx.clink();
+      }
+    }
+  }
+
+  function quenchIngot() {
+    if (!ingot) return;
+    const piece = ingot;
+    ingot = null;
+    // Cool the metal: hot glow -> quenched steel
+    piece.material.color.setHex(0x9aa2ad);
+    piece.material.emissive.setHex(0x2c3138);
+    piece.material.emissiveIntensity = 0.12;
+    piece.material.metalness = 0.95;
+    piece.material.roughness = 0.3;
+    piece.userData = {
+      baseEmissive: 0.12,
+      baseScale: 1,
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 1.5, 2.4, 0.6),
+      angularVelocity: new THREE.Vector3(0, 1.2, 0),
+      grabbedBy: null,
+      hovered: false
+    };
+    objects.push(piece);
+    spawnBurst(piece.position, 0xffffff, 34, 2.6);
+    spawnRipple(piece.position, 0xffffff);
+    sfx.hiss();
+    showToast('焼き入れしました — 掴めるようになりました');
+    createIngot();
+  }
+
+  document.getElementById('btn-quench').addEventListener('click', quenchIngot);
 
   /* ============================================================
    *  Object duplication (used by combos and circle-trace)
@@ -1151,6 +1279,7 @@
         grabOffset: new THREE.Vector3(),
         hovered: null,
         cursor: makeCursor(),
+        hand3d: makeHand3d(),
         smoothedLm: null,
         indexTipWorld: new THREE.Vector3(),  // fingertip in world (drawing / laser origin)
         palmWorld: new THREE.Vector3(),      // palm center in world (force field)
@@ -1167,6 +1296,58 @@
       };
     }
     return handStates[label];
+  }
+
+  /* ============================================================
+   *  3D hand skeleton: your hand exists inside the scene
+   *  (21 joints + bone segments, with MediaPipe relative depth)
+   * ============================================================ */
+  const HAND_DEPTH_SCALE = 5;     // world units per MediaPipe z unit
+  const jointGeo = new THREE.SphereGeometry(0.045, 8, 6);
+  const FINGERTIPS = [4, 8, 12, 16, 20];
+
+  function makeHand3d() {
+    const group = new THREE.Group();
+    group.visible = false;
+    const jointMat = new THREE.MeshBasicMaterial({ color: 0xf2e8d5, transparent: true, opacity: 0.95 });
+    const joints = [];
+    for (let i = 0; i < 21; i++) {
+      const s = new THREE.Mesh(jointGeo, jointMat);
+      s.scale.setScalar(i === 0 ? 1.8 : (FINGERTIPS.includes(i) ? 1.3 : 1));
+      joints.push(s);
+      group.add(s);
+    }
+    const conns = (typeof HAND_CONNECTIONS !== 'undefined') ? HAND_CONNECTIONS : [];
+    const boneGeo = new THREE.BufferGeometry();
+    boneGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(Math.max(conns.length, 1) * 6), 3));
+    const bones = new THREE.LineSegments(boneGeo, new THREE.LineBasicMaterial({
+      color: 0xf2e8d5, transparent: true, opacity: 0.45
+    }));
+    bones.frustumCulled = false;
+    group.add(bones);
+    scene.add(group);
+    return { group, joints, bones, conns };
+  }
+
+  const _hp = new THREE.Vector3();
+  function updateHand3d(hs, lm) {
+    const h = hs.hand3d;
+    h.group.visible = true;
+    for (let i = 0; i < 21; i++) {
+      lmToWorld(lm[i].x, lm[i].y, _hp);
+      // Relative depth: landmarks closer to the camera than the wrist
+      // (more negative z) come forward in world space
+      _hp.z += -(lm[i].z - lm[0].z) * HAND_DEPTH_SCALE;
+      h.joints[i].position.copy(_hp);
+    }
+    const arr = h.bones.geometry.attributes.position.array;
+    for (let c = 0; c < h.conns.length; c++) {
+      const a = h.joints[h.conns[c][0]].position;
+      const b = h.joints[h.conns[c][1]].position;
+      arr[c * 6] = a.x; arr[c * 6 + 1] = a.y; arr[c * 6 + 2] = a.z;
+      arr[c * 6 + 3] = b.x; arr[c * 6 + 4] = b.y; arr[c * 6 + 5] = b.z;
+    }
+    h.bones.geometry.attributes.position.needsUpdate = true;
   }
 
   function makeCursor() {
@@ -1274,6 +1455,7 @@
       }
       const lm = hs.smoothedLm;
       const g = analyzeHand(lm);
+      updateHand3d(hs, lm);
 
       // Pointer = index fingertip; grab anchor = pinch midpoint
       const pinchMidX = (lm[4].x + lm[8].x) / 2;
@@ -1301,6 +1483,7 @@
         hs.pinching = false;
         hs.smoothedLm = null;
         hs.cursor.visible = false;
+        hs.hand3d.group.visible = false;
         endStroke(hs);
         hideLaser(hs);
         hs.trail.length = 0;
@@ -1387,6 +1570,17 @@
     hs.cursor.position.copy(hs.worldPos);
     hs.cursor.lookAt(camera.position);
     hs.cursor.material.color.setHex(hs.grabbed ? 0xd9a441 : (hs.pinching ? 0xe8622c : 0xf2e8d5));
+
+    // Sculpt mode: hands work the ingot, nothing else
+    if (mode === 'sculpt') {
+      endStroke(hs);
+      hideLaser(hs);
+      hs.trail.length = 0;
+      hs.comboPrev = null;
+      setHover(hs, null);
+      sculptWith(hs);
+      return;
+    }
 
     if (hs.grabbed) {
       // While holding: no drawing, no laser, no circle detection
@@ -1555,6 +1749,12 @@
     updateParticles(dt);
     updateStrokes();
     updateRipples(dt);
+
+    // Ingot: heat glow decays, with a slow furnace pulse
+    if (ingot) {
+      ingot.userData.heat = Math.max(0, ingot.userData.heat - dt * 1.2);
+      ingot.material.emissiveIntensity = 0.4 + ingot.userData.heat * 0.55 + Math.sin(time * 2.2) * 0.06;
+    }
 
     // FPS (update label ~2x/sec)
     fpsAccum += dt; fpsFrames++; fpsTimer += dt;
