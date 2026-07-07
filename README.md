@@ -28,7 +28,7 @@ The app has three modes (switcher at the top center): **Play / Draw / Laser**.
 Point with the index finger to draw glowing lines in 3D. Lines fade after 30 s; use **Clear Lines** to erase all.
 
 ### ⚡ Laser mode
-Make a peace sign ✌️ to fire a glowing laser that knocks objects away.
+Make a peace sign ✌️ to fire a glowing laser that knocks objects away. Hold the beam on the same target for about a second to shatter it.
 
 ### 🖼🎬 Media
 Upload images or videos (button or drag & drop) — they appear as grabbable framed planes; videos loop as live textures.
@@ -46,6 +46,7 @@ Just open `index.html` in a browser (Chrome / Edge / Safari). Allow camera acces
 ## Features
 
 - Mode-based UI (Play / Draw / Laser) with per-mode help hints
+- Screenshot capture, zero-gravity toggle, and WebAudio sound effects (mutable)
 - Glassmorphism dark UI with FPS counter, live gesture badge, camera preview
 - Image & video upload as grabbable textured planes with glowing frames
 - Two-hand combo gestures and circle-trace duplication

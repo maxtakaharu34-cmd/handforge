@@ -189,6 +189,9 @@
     <button class="btn primary" id="btn-upload" title="Upload image / video">画像・動画を置く</button>
     <button class="btn" id="btn-add" title="Add object">かたちを足す</button>
     <button class="btn" id="btn-clear-lines" title="Clear lines">線を消す</button>
+    <button class="btn" id="btn-shot" title="Save a screenshot">写す</button>
+    <button class="btn" id="btn-gravity" title="Toggle gravity">浮かす</button>
+    <button class="btn" id="btn-sound" title="Toggle sound">音あり</button>
     <button class="btn" id="btn-reset" title="Reset">はじめから</button>
     <input type="file" id="file-input" accept="image/*,video/*" multiple style="display:none">
   </div>
@@ -225,6 +228,7 @@
   <div class="help-group" data-mode="laser">
     <div class="hint"><span class="ico">✌️</span><b>ピースで発射</b>Peace to fire<br><span class="en">人差し指＋中指を伸ばす</span></div>
     <div class="hint"><span class="ico">🎯</span><b>当てて弾く</b>Knock objects<br><span class="en">ビームが当たると弾き飛ぶ</span></div>
+    <div class="hint"><span class="ico">💥</span><b>射抜いて砕く</b>Hold to shatter<br><span class="en">同じ的に約1秒当て続ける</span></div>
   </div>
 </div>
 
@@ -486,6 +490,7 @@
     scene.add(mesh);
     objects.push(mesh);
     spawnBurst(mesh.position, 0xd9a441, 22, 2);
+    sfx.pop();
     return mesh;
   }
 
@@ -714,6 +719,7 @@
       hs.comboPrev = null;
       setHover(hs, null);
     }
+    sfx.pop();
     showToast(MODE_NAMES[m]);
   }
 
@@ -819,6 +825,7 @@
   }
 
   const LASER_UP = new THREE.Vector3(0, 1, 0);
+  const LASER_DESTROY_TIME = 1.2; // seconds of sustained hit to shatter a target
   function updateLaser(hs) {
     if (!hs.laser) hs.laser = makeLaser();
     const L = hs.laser;
@@ -853,17 +860,41 @@
       hit.object.userData.angularVelocity.y += 0.4;
       L.hitDot.visible = true;
       L.hitDot.position.copy(hit.point);
-      if (nowSec() - hs.lastSpark > 0.25) {
-        hs.lastSpark = nowSec();
+      const t = nowSec();
+      if (t - hs.lastSpark > 0.25) {
+        hs.lastSpark = t;
         spawnBurst(hit.point, 0x6ee7ff, 10, 1.6);
+        sfx.laserHit();
+      }
+      // Keep the beam on the same target to charge up and shatter it
+      if (hs.laserTarget === hit.object) {
+        const progress = (t - hs.laserSince) / LASER_DESTROY_TIME;
+        L.hitDot.scale.setScalar(1 + Math.min(progress, 1) * 2.5);
+        if (progress >= 1) {
+          const o = hit.object;
+          const color = o.material.color ? o.material.color.getHex() : 0xffffff;
+          spawnBurst(o.position, color, 42, 4.2);
+          spawnRipple(o.position, 0xffffff);
+          disposeObject(o);
+          sfx.shatter();
+          showToast('射抜きました');
+          hs.laserTarget = null;
+          L.hitDot.visible = false;
+        }
+      } else {
+        hs.laserTarget = hit.object;
+        hs.laserSince = t;
+        L.hitDot.scale.setScalar(1);
       }
     } else {
       L.hitDot.visible = false;
+      hs.laserTarget = null;
     }
   }
 
   function hideLaser(hs) {
     if (hs.laser) hs.laser.group.visible = false;
+    hs.laserTarget = null;
   }
 
   /* ============================================================
@@ -877,6 +908,80 @@
     toastWrap.appendChild(el);
     setTimeout(() => el.remove(), 2400);
   }
+
+  /* ============================================================
+   *  Sound effects (WebAudio-synthesized, no assets)
+   * ============================================================ */
+  let audioCtx = null;
+  let muted = false;
+
+  function playTone(freq, dur, type = 'sine', gain = 0.12, slide = 0) {
+    if (muted) return;
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t0 = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t0 + dur);
+    g.gain.setValueAtTime(gain, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur);
+  }
+
+  const sfx = {
+    grab: () => playTone(320, 0.12, 'triangle', 0.12, 120),
+    release: () => playTone(260, 0.2, 'sine', 0.1, -160),
+    combo: () => { playTone(660, 0.12, 'sine', 0.1); setTimeout(() => playTone(880, 0.15, 'sine', 0.1), 90); },
+    clone: () => { playTone(520, 0.1, 'triangle', 0.1); setTimeout(() => playTone(780, 0.18, 'triangle', 0.1), 80); },
+    laserHit: () => playTone(1200, 0.06, 'square', 0.04, -400),
+    shatter: () => playTone(160, 0.35, 'sawtooth', 0.14, -100),
+    pop: () => playTone(440, 0.08, 'sine', 0.08, 60)
+  };
+
+  document.getElementById('btn-sound').addEventListener('click', (e) => {
+    muted = !muted;
+    e.target.textContent = muted ? '音なし' : '音あり';
+    if (!muted) sfx.pop();
+    showToast(muted ? '音を消しました' : '音を出します');
+  });
+
+  /* ============================================================
+   *  Screenshot: render the current frame and save it as PNG
+   * ============================================================ */
+  document.getElementById('btn-shot').addEventListener('click', () => {
+    renderer.render(scene, camera);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'handforge.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      sfx.pop();
+      showToast('画像を保存しました');
+    }, 'image/png');
+  });
+
+  /* ============================================================
+   *  Gravity toggle: let everything float
+   * ============================================================ */
+  let gravityOn = true;
+  document.getElementById('btn-gravity').addEventListener('click', (e) => {
+    gravityOn = !gravityOn;
+    e.target.textContent = gravityOn ? '浮かす' : '落とす';
+    if (!gravityOn) {
+      // Give objects a gentle lift so the change is visible
+      for (const o of objects) o.userData.velocity.y += 0.5 + Math.random() * 0.5;
+    }
+    sfx.pop();
+    showToast(gravityOn ? '重力が戻りました' : '無重力になりました');
+  });
 
   /* ============================================================
    *  Object duplication (used by combos and circle-trace)
@@ -930,6 +1035,7 @@
     const ud = mesh.userData;
     if (action === 'duplicate') {
       duplicateObject(mesh, 0xd9a441);
+      sfx.clone();
       showToast('✌️ 複製しました');
     } else if (action === 'grow') {
       ud.baseScale = Math.min(ud.baseScale * 1.5, 3.0);
@@ -949,6 +1055,7 @@
       spawnBurst(mesh.position, color, 26, 2.6);
       showToast('✊ 色を変えました');
     }
+    if (action !== 'duplicate') sfx.combo();
   }
 
   /* ============================================================
@@ -1019,6 +1126,7 @@
     const copy = duplicateObject(best, 0xd9a441);
     spawnRipple(best.position, 0xd9a441);
     spawnRipple(copy.position, 0xffffff);
+    sfx.clone();
     showToast('⭕ 囲んで複製しました');
   }
 
@@ -1052,6 +1160,8 @@
         lastSpark: 0,
         trail: [],           // recent fingertip path for circle detection
         lastCircle: 0,
+        laserTarget: null,   // object the laser is charging on
+        laserSince: 0,
         comboPrev: null,     // last combo gesture (rising-edge trigger)
         lastCombo: 0
       };
@@ -1241,6 +1351,7 @@
     hs.grabOffset.copy(mesh.position).sub(hs.worldPos);
     mesh.userData.velocity.set(0, 0, 0);
     spawnBurst(mesh.position, mesh.material.color.getHex(), 26, 2.2);
+    sfx.grab();
   }
 
   function releaseObject(hs) {
@@ -1255,6 +1366,7 @@
       (Math.random() - 0.5) * 2
     );
     spawnBurst(mesh.position, 0xffffff, 32, 3.2);
+    sfx.release();
     hs.grabbed = null;
   }
 
@@ -1373,8 +1485,8 @@
       const ud = o.userData;
 
       if (!ud.grabbedBy) {
-        // Inertia + light gravity + damping
-        ud.velocity.y -= 3.2 * dt;
+        // Inertia + light gravity (unless zero-g) + damping
+        if (gravityOn) ud.velocity.y -= 3.2 * dt;
         ud.velocity.multiplyScalar(1 - 0.6 * dt);
         o.position.addScaledVector(ud.velocity, dt);
 
